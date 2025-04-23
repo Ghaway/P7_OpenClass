@@ -17,8 +17,9 @@ for feature in FEATURE_NAMES:
 # Bouton pour prédire
 if st.button("Prédire"):
     try:
-        # Requête vers l’API Flask
-        response = requests.post("http://localhost:5000/predict", json=user_input)
+        # ✅ Remplace localhost par l'URL de ton API Render
+        response = requests.post("https://p7-openclass.onrender.com/predict", json=user_input)
+        
         
         if response.status_code == 200:
             result = response.json()
