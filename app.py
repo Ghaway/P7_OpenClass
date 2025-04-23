@@ -6,19 +6,23 @@ import json
 import os
 
 # === Configuration ===
-MODEL_PATH = "mlflow_model"
-FEATURES_PATH = os.path.join(MODEL_PATH, "feature_names.json")
+
+MODEL_PATH = "."  # ou "./" pour dire "répertoire courant"
+FEATURES_PATH = "feature_names.json"
+
 THRESHOLD = 0.42  # Seuil métier optimisé
 
 # === Initialisation Flask ===
 app = Flask(__name__)
 
 # === Chargement du modèle MLflow ===
+
 model = mlflow.sklearn.load_model(MODEL_PATH)
 
 # === Chargement des noms de features ===
 with open(FEATURES_PATH) as f:
     FEATURE_NAMES = json.load(f)
+
 
 @app.route("/")
 def index():
