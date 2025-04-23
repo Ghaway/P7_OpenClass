@@ -5,7 +5,7 @@ import json
 st.title("🔍 Simulation d'acceptation de crédit")
 
 # Charger les features depuis le fichier JSON utilisé par Flask
-with open("mlflow_model/feature_names.json") as f:
+with open("feature_names.json") as f:
     FEATURE_NAMES = json.load(f)
 
 # Créer dynamiquement les champs d'entrée pour chaque feature
