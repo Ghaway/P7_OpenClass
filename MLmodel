@@ -11,55 +11,12 @@ flavors:
     code: null
     pickled_model: model.pkl
     serialization_format: cloudpickle
-    sklearn_version: 1.2.2
+    sklearn_version: 1.6.1
 mlflow_version: 2.18.0
-model_size_bytes: 269710
-model_uuid: 100deacd7e2d47d4b8dcccd67d462b15
+model_size_bytes: 535543
+model_uuid: db508610c73b4ef4a02a350e119504a2
 signature:
-  inputs: '[{"type": "double", "name": "EXT_SOURCE_2", "required": true}, {"type":
-    "double", "name": "EXT_SOURCE_1", "required": true}, {"type": "double", "name":
-    "NAME_INCOME_TYPE_Working", "required": true}, {"type": "double", "name": "ins_Ratio_Retard_Montant_mean_mean",
-    "required": true}, {"type": "double", "name": "prev_Ratio_Credit_Demande_mean",
-    "required": true}, {"type": "double", "name": "EXT_SOURCE_3", "required": true},
-    {"type": "double", "name": "DAYS_BIRTH", "required": true}, {"type": "double",
-    "name": "cc_PERIODE_Y_sum_sum", "required": true}, {"type": "double", "name":
-    "DAYS_LAST_PHONE_CHANGE", "required": true}, {"type": "double", "name": "NonActive_Y-2_Amt_Credit_Sum",
-    "required": true}, {"type": "double", "name": "DAYS_EMPLOYED", "required": true},
-    {"type": "double", "name": "NAME_EDUCATION_TYPE_Secondary / secondary special",
-    "required": true}, {"type": "double", "name": "NonActive_Y-2_Credit_Count", "required":
-    true}, {"type": "double", "name": "prev_Ratio_Credit_Demande_max", "required":
-    true}, {"type": "double", "name": "NAME_INCOME_TYPE_Pensioner", "required": true},
-    {"type": "double", "name": "CODE_GENDER", "required": true}, {"type": "double",
-    "name": "cc_Ratio_Utilisation_Credit_max_max", "required": true}, {"type": "double",
-    "name": "cc_Ratio_Utilisation_Credit_mean_mean", "required": true}, {"type": "double",
-    "name": "ins_DAYS_INSTALMENT_min_min", "required": true}, {"type": "double", "name":
-    "NonActive_Y_CREDIT_TYPE_Credit card_count", "required": true}, {"type": "double",
-    "name": "NonActive_Y_Credit_Count", "required": true}, {"type": "double", "name":
-    "ELEVATORS_MEDI", "required": true}, {"type": "double", "name": "FLAG_EMP_PHONE",
-    "required": true}, {"type": "double", "name": "NonActive_Y_Overdue_Mean", "required":
-    true}, {"type": "double", "name": "REGION_RATING_CLIENT_W_CITY", "required": true},
-    {"type": "double", "name": "AMT_GOODS_PRICE", "required": true}, {"type": "double",
-    "name": "NonActive_Y_Overdue_Sum", "required": true}, {"type": "double", "name":
-    "DAYS_EMPLOYED_PERC", "required": true}, {"type": "double", "name": "AMT_CREDIT",
-    "required": true}, {"type": "double", "name": "FLOORSMAX_MEDI", "required": true},
-    {"type": "double", "name": "prev_Ratio_Credit_Demande_2Y_mean", "required": true},
-    {"type": "double", "name": "REGION_RATING_CLIENT", "required": true}, {"type":
-    "double", "name": "NonActive_Y_Overdue_Max", "required": true}, {"type": "double",
-    "name": "ins_AMT_PAYMENT_min_min", "required": true}, {"type": "double", "name":
-    "pos_Fini_Months_max", "required": true}, {"type": "double", "name": "pos_Pire_DFT_Y_2_count",
-    "required": true}, {"type": "double", "name": "ENTRANCES_MEDI", "required": true},
-    {"type": "double", "name": "prev_Ratio_Credit_Demande_min", "required": true},
-    {"type": "double", "name": "EMERGENCYSTATE_MODE_No", "required": true}, {"type":
-    "double", "name": "ins_Ratio_Retard_Montant_max_max", "required": true}, {"type":
-    "double", "name": "pos_Ratio_DFT_Y_1_count", "required": true}, {"type": "double",
-    "name": "DAYS_DECISION_min", "required": true}, {"type": "double", "name": "DAYS_ID_PUBLISH",
-    "required": true}, {"type": "double", "name": "pos_Max_CNT_INSTALMENT_count",
-    "required": true}, {"type": "double", "name": "pos_Nombre_mois_dft_Y_count", "required":
-    true}, {"type": "double", "name": "pos_Ratio_DFT_Y_2_count", "required": true},
-    {"type": "double", "name": "prev_Ratio_Credit_Demande_1Y_mean", "required": true},
-    {"type": "double", "name": "SK_ID_PREV_sum", "required": true}, {"type": "double",
-    "name": "pos_Pire_DFT_Y_count", "required": true}, {"type": "double", "name":
-    "ins_Pire_DFT_Y_2_max_max", "required": true}]'
+  inputs: '[{"type": "tensor", "tensor-spec": {"dtype": "float64", "shape": [-1, 11]}}]'
   outputs: '[{"type": "double", "name": "TARGET", "required": true}]'
   params: null
-utc_time_created: '2025-04-16 10:26:19.960473'
+utc_time_created: '2025-05-18 12:49:52.907351'

@@ -1,0 +1,67 @@
+[
+    {
+        "NAME_INCOME_TYPE_Working": 0.0,
+        "EXT_SOURCE_2": 0.44065549618901,
+        "NAME_EDUCATION_TYPE_Higher education": 0.0,
+        "NAME_EDUCATION_TYPE_Secondary / secondary special": 1.0,
+        "cc_PERIODE_Y_sum_sum": 6.0,
+        "FLAG_EMP_PHONE": 1.0,
+        "EXT_SOURCE_1": 0.1386043870776535,
+        "EXT_SOURCE_3": 0.2512394458905693,
+        "FLAG_DOCUMENT_3": 1.0,
+        "CODE_GENDER": 1.0,
+        "FLAG_OWN_CAR": 0.0
+    },
+    {
+        "NAME_INCOME_TYPE_Working": 0.0,
+        "EXT_SOURCE_2": 0.5771473646712557,
+        "NAME_EDUCATION_TYPE_Higher education": 0.0,
+        "NAME_EDUCATION_TYPE_Secondary / secondary special": 1.0,
+        "cc_PERIODE_Y_sum_sum": 0.0,
+        "FLAG_EMP_PHONE": 1.0,
+        "EXT_SOURCE_1": 0.0,
+        "EXT_SOURCE_3": 0.6894791426446275,
+        "FLAG_DOCUMENT_3": 1.0,
+        "CODE_GENDER": 1.0,
+        "FLAG_OWN_CAR": 1.0
+    },
+    {
+        "NAME_INCOME_TYPE_Working": 1.0,
+        "EXT_SOURCE_2": 0.6161719396677756,
+        "NAME_EDUCATION_TYPE_Higher education": 0.0,
+        "NAME_EDUCATION_TYPE_Secondary / secondary special": 1.0,
+        "cc_PERIODE_Y_sum_sum": 0.0,
+        "FLAG_EMP_PHONE": 1.0,
+        "EXT_SOURCE_1": 0.0,
+        "EXT_SOURCE_3": 0.2881295999178507,
+        "FLAG_DOCUMENT_3": 0.0,
+        "CODE_GENDER": 0.0,
+        "FLAG_OWN_CAR": 1.0
+    },
+    {
+        "NAME_INCOME_TYPE_Working": 1.0,
+        "EXT_SOURCE_2": 0.6344295917104368,
+        "NAME_EDUCATION_TYPE_Higher education": 0.0,
+        "NAME_EDUCATION_TYPE_Secondary / secondary special": 1.0,
+        "cc_PERIODE_Y_sum_sum": 0.0,
+        "FLAG_EMP_PHONE": 1.0,
+        "EXT_SOURCE_1": 0.8477645749713971,
+        "EXT_SOURCE_3": 0.7958031328748403,
+        "FLAG_DOCUMENT_3": 0.0,
+        "CODE_GENDER": 1.0,
+        "FLAG_OWN_CAR": 0.0
+    },
+    {
+        "NAME_INCOME_TYPE_Working": 0.0,
+        "EXT_SOURCE_2": 0.7322116316555722,
+        "NAME_EDUCATION_TYPE_Higher education": 1.0,
+        "NAME_EDUCATION_TYPE_Secondary / secondary special": 0.0,
+        "cc_PERIODE_Y_sum_sum": 0.0,
+        "FLAG_EMP_PHONE": 0.0,
+        "EXT_SOURCE_1": 0.0,
+        "EXT_SOURCE_3": 0.5989262182569273,
+        "FLAG_DOCUMENT_3": 0.0,
+        "CODE_GENDER": 1.0,
+        "FLAG_OWN_CAR": 1.0
+    }
+]
