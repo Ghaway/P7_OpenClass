@@ -98,38 +98,51 @@ def calculate_local_feature_importance(model, client_data):
             explainer = shap.TreeExplainer(base_model)
             shap_values = explainer.shap_values(client_data_array)
 
+        # Afficher les informations de débogage
+        st.info(f"Forme des valeurs SHAP: {shap_values.shape if hasattr(shap_values, 'shape') else type(shap_values)}")
+        
         # Gérer le cas où shap_values peut être une liste (classification binaire)
         if isinstance(shap_values, list):
             # Pour la classification binaire, prendre les valeurs de la classe positive (index 1)
             if len(shap_values) == 2:
-                shap_values = shap_values[1]
+                shap_values_to_plot = shap_values[1][0]  # Première observation, classe positive
+                expected_value = explainer.expected_value[1] if isinstance(explainer.expected_value, np.ndarray) else explainer.expected_value
             else:
-                shap_values = shap_values[0]
+                shap_values_to_plot = shap_values[0][0]
+                expected_value = explainer.expected_value[0] if isinstance(explainer.expected_value, np.ndarray) else explainer.expected_value
+        else:
+            # Cas où shap_values est un array numpy
+            if len(shap_values.shape) == 3:  # (n_samples, n_features, n_classes)
+                shap_values_to_plot = shap_values[0, :, 1]  # Première observation, classe positive
+                expected_value = explainer.expected_value[1] if isinstance(explainer.expected_value, np.ndarray) else explainer.expected_value
+            elif len(shap_values.shape) == 2:  # (n_samples, n_features)
+                shap_values_to_plot = shap_values[0, :]  # Première observation
+                expected_value = explainer.expected_value[0] if isinstance(explainer.expected_value, np.ndarray) else explainer.expected_value
+            else:  # Array 1D
+                shap_values_to_plot = shap_values
+                expected_value = explainer.expected_value
 
         # Créer le graphique en cascade
         st.subheader("SHAP Waterfall Plot")
         fig, ax = plt.subplots(figsize=(10, 6))
         
-        # S'assurer que shap_values est un array 1D
-        if len(shap_values.shape) > 1:
-            shap_values = shap_values[0]
-            
+        # S'assurer que la longueur des features correspond
+        min_len = min(len(feature_names), len(shap_values_to_plot))
+        
         shap.plots.waterfall(
             shap.Explanation(
-                values=shap_values,
-                base_values=explainer.expected_value if not isinstance(explainer.expected_value, np.ndarray) else explainer.expected_value[0],
-                feature_names=feature_names[:len(shap_values)]  # S'assurer que la longueur correspond
+                values=shap_values_to_plot[:min_len],
+                base_values=expected_value,
+                feature_names=feature_names[:min_len]
             ),
-            max_display=min(14, len(shap_values)),
+            max_display=min(14, min_len),
             show=False
         )
         st.pyplot(fig)
         plt.close()
         
         # Retourner un dictionnaire avec les valeurs SHAP pour chaque feature
-        # Limiter aux features disponibles si les dimensions ne correspondent pas
-        min_len = min(len(feature_names), len(shap_values))
-        return dict(zip(feature_names[:min_len], shap_values[:min_len]))
+        return dict(zip(feature_names[:min_len], shap_values_to_plot[:min_len]))
         
     except Exception as e:
         st.error(f"Erreur lors du calcul de l'importance locale: {e}")
