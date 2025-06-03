@@ -3,6 +3,11 @@ import json
 import requests
 import pandas as pd
 import numpy as np
+import os
+import mlflow.sklearn
+import shap
+import matplotlib.pyplot as plt
+
 
 # --- Configuration ---
 MODEL_PATH = os.environ.get('MODEL_PATH', 'file://mlflow_model')
