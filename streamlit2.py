@@ -63,7 +63,7 @@ def load_global_feature_importance():
 # --- Fonction pour calculer l'importance locale ---
 def calculate_local_feature_importance(model, client_data):
     """Calcule l'importance locale basée sur les valeurs du client."""
-     client_data_array = np.array([list(client_data.values())])
+    client_data_array = np.array([list(client_data.values())])
 
     # Obtenir les noms des caractéristiques
     feature_names = list(client_data.keys())
