@@ -69,35 +69,92 @@ def load_global_feature_importance():
 def calculate_local_feature_importance(model, client_data):
     """Calcule l'importance locale basée sur les valeurs du client."""
     try:
+        # Vérifier si le modèle est un Pipeline et extraire le modèle de base
+        from sklearn.pipeline import Pipeline
+        if isinstance(model, Pipeline):
+            # Obtenir le dernier step du pipeline (généralement le modèle)
+            base_model = model.steps[-1][1]
+            st.info(f"Pipeline détecté, utilisation du modèle: {type(base_model).__name__}")
+        else:
+            base_model = model
+        
+        # Préparer les données
         client_data_array = np.array([list(client_data.values())])
-
-        # Obtenir les noms des caractéristiques
         feature_names = list(client_data.keys())
+        
+        # Si c'est un pipeline, on doit transformer les données avec les étapes de preprocessing
+        if isinstance(model, Pipeline):
+            # Appliquer toutes les transformations sauf la dernière étape (le modèle)
+            transformed_data = client_data_array
+            for step_name, transformer in model.steps[:-1]:
+                if hasattr(transformer, 'transform'):
+                    transformed_data = transformer.transform(transformed_data)
+            
+            # Utiliser les données transformées pour SHAP
+            explainer = shap.TreeExplainer(base_model)
+            shap_values = explainer.shap_values(transformed_data)
+        else:
+            # Si ce n'est pas un pipeline, utiliser directement
+            explainer = shap.TreeExplainer(base_model)
+            shap_values = explainer.shap_values(client_data_array)
 
-        # Calculer les valeurs SHAP
-        explainer = shap.TreeExplainer(model)
-        shap_values = explainer.shap_values(client_data_array)
+        # Gérer le cas où shap_values peut être une liste (classification binaire)
+        if isinstance(shap_values, list):
+            # Pour la classification binaire, prendre les valeurs de la classe positive (index 1)
+            if len(shap_values) == 2:
+                shap_values = shap_values[1]
+            else:
+                shap_values = shap_values[0]
 
         # Créer le graphique en cascade
         st.subheader("SHAP Waterfall Plot")
-        fig, ax = plt.subplots()
+        fig, ax = plt.subplots(figsize=(10, 6))
+        
+        # S'assurer que shap_values est un array 1D
+        if len(shap_values.shape) > 1:
+            shap_values = shap_values[0]
+            
         shap.plots.waterfall(
             shap.Explanation(
-                values=shap_values[0],
-                base_values=explainer.expected_value,
-                feature_names=feature_names
+                values=shap_values,
+                base_values=explainer.expected_value if not isinstance(explainer.expected_value, np.ndarray) else explainer.expected_value[0],
+                feature_names=feature_names[:len(shap_values)]  # S'assurer que la longueur correspond
             ),
-            max_display=14,
+            max_display=min(14, len(shap_values)),
             show=False
         )
         st.pyplot(fig)
+        plt.close()
         
         # Retourner un dictionnaire avec les valeurs SHAP pour chaque feature
-        return dict(zip(feature_names, shap_values[0]))
+        # Limiter aux features disponibles si les dimensions ne correspondent pas
+        min_len = min(len(feature_names), len(shap_values))
+        return dict(zip(feature_names[:min_len], shap_values[:min_len]))
         
     except Exception as e:
         st.error(f"Erreur lors du calcul de l'importance locale: {e}")
-        return {}
+        st.error(f"Type de modèle: {type(model)}")
+        
+        # Essayer une approche alternative avec un explainer générique
+        try:
+            st.info("Tentative avec un explainer générique...")
+            # Créer des données de background simples
+            background_data = np.zeros((1, len(client_data)))
+            explainer = shap.Explainer(model.predict_proba if hasattr(model, 'predict_proba') else model.predict, 
+                                     background_data)
+            shap_values = explainer(np.array([list(client_data.values())]))
+            
+            # Extraire les valeurs pour la classe positive si c'est de la classification
+            if len(shap_values.values.shape) > 2:
+                values = shap_values.values[0, :, 1]  # classe positive
+            else:
+                values = shap_values.values[0]
+                
+            return dict(zip(list(client_data.keys()), values))
+            
+        except Exception as e2:
+            st.error(f"Erreur avec l'explainer générique: {e2}")
+            return {}
 
 # --- Fonction pour créer une jauge simple ---
 def create_simple_gauge(probability):
