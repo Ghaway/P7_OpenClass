@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 
 # --- Configuration ---
+MODEL_PATH = os.environ.get('MODEL_PATH', 'file://mlflow_model')
 DATA_FILE = 'first_5_rows.json'
 FEATURE_IMPORTANCE_FILE = 'feature_importance_global.json'
 API_URL = "https://p7-openclass.onrender.com/predict"
@@ -60,42 +61,52 @@ def load_global_feature_importance():
         return {}
 
 # --- Fonction pour calculer l'importance locale ---
-def calculate_local_feature_importance(client_data, global_importance):
-    """Calcule une approximation de l'importance locale basée sur les valeurs du client."""
-    local_importance = {}
-    
-    for feature, value in client_data.items():
-        if feature in global_importance:
-            contribution = global_importance[feature] * abs(value - 0.5) / 0.5
-            local_importance[feature] = contribution
-    
-    return local_importance
+def calculate_local_feature_importance(model, client_data)::
+    """Calcule l'importance locale basée sur les valeurs du client."""
+     client_data_array = np.array([list(client_data.values())])
+
+    # Obtenir les noms des caractéristiques
+    feature_names = list(client_data.keys())
+
+    # Calculer les valeurs SHAP
+    explainer = shap.TreeExplainer(model)
+    shap_values = explainer.shap_values(client_data_array)
+
+    # Créer le graphique en cascade
+    st.subheader("SHAP Waterfall Plot")
+    fig, ax = plt.subplots()
+    shap.plots.waterfall(
+        shap.Explanation(
+            values=shap_values[0],
+            base_values=explainer.expected_value,
+            feature_names=feature_names
+        ),
+        max_display=14,
+        show=False
+    )
+    st.pyplot(fig)
 
 # --- Fonction pour créer une jauge simple ---
 def create_simple_gauge(probability):
     """Crée une jauge simple avec des colonnes Streamlit."""
     score = probability * 100
-    
-    if score < 30:
+
+    if score < 49:  # Seuil ajusté à 49%
         color = "🟢"
         risk_level = "Faible"
         color_class = "success"
-    elif score < 60:
-        color = "🟡"
-        risk_level = "Modéré"
-        color_class = "warning"
     else:
         color = "🔴"
         risk_level = "Élevé"
         color_class = "error"
-    
+
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.markdown(f"""
         <div style="text-align: center; padding: 20px; border-radius: 10px; border: 2px solid #ddd;">
             <h2>{color} {score:.1f}%</h2>
             <p><strong>Risque: {risk_level}</strong></p>
-            <div style="background: linear-gradient(90deg, green 30%, orange 30% 60%, red 60%); height: 20px; border-radius: 10px; margin: 10px 0;">
+            <div style="background: linear-gradient(90deg, green 49%, red 49%); height: 20px; border-radius: 10px; margin: 10px 0;">
                 <div style="width: {score}%; height: 100%; background: rgba(0,0,0,0.3); border-radius: 10px;"></div>
             </div>
         </div>
@@ -150,6 +161,9 @@ st.set_page_config(
 )
 
 st.title("🏦 Application de Prédiction de Défaut Client")
+
+# cgargement modèle
+model = mlflow.sklearn.load_model(MODEL_PATH)
 
 # Test de connectivité API
 with st.sidebar:
@@ -221,7 +235,7 @@ if all_data is not None:
                         if global_importance:
                             st.subheader("📈 Analyse des Variables")
                             
-                            local_importance = calculate_local_feature_importance(features_to_display, global_importance)
+                            local_importance = calculate_local_feature_importance(model, client_data)
                             
                             # Créer un DataFrame pour l'affichage
                             df_analysis = pd.DataFrame([
