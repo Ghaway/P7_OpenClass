@@ -61,7 +61,7 @@ def load_global_feature_importance():
         return {}
 
 # --- Fonction pour calculer l'importance locale ---
-def calculate_local_feature_importance(model, client_data)::
+def calculate_local_feature_importance(model, client_data):
     """Calcule l'importance locale basée sur les valeurs du client."""
      client_data_array = np.array([list(client_data.values())])
 
