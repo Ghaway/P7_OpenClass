@@ -68,28 +68,36 @@ def load_global_feature_importance():
 # --- Fonction pour calculer l'importance locale ---
 def calculate_local_feature_importance(model, client_data):
     """Calcule l'importance locale basée sur les valeurs du client."""
-    client_data_array = np.array([list(client_data.values())])
+    try:
+        client_data_array = np.array([list(client_data.values())])
 
-    # Obtenir les noms des caractéristiques
-    feature_names = list(client_data.keys())
+        # Obtenir les noms des caractéristiques
+        feature_names = list(client_data.keys())
 
-    # Calculer les valeurs SHAP
-    explainer = shap.TreeExplainer(model)
-    shap_values = explainer.shap_values(client_data_array)
+        # Calculer les valeurs SHAP
+        explainer = shap.TreeExplainer(model)
+        shap_values = explainer.shap_values(client_data_array)
 
-    # Créer le graphique en cascade
-    st.subheader("SHAP Waterfall Plot")
-    fig, ax = plt.subplots()
-    shap.plots.waterfall(
-        shap.Explanation(
-            values=shap_values[0],
-            base_values=explainer.expected_value,
-            feature_names=feature_names
-        ),
-        max_display=14,
-        show=False
-    )
-    st.pyplot(fig)
+        # Créer le graphique en cascade
+        st.subheader("SHAP Waterfall Plot")
+        fig, ax = plt.subplots()
+        shap.plots.waterfall(
+            shap.Explanation(
+                values=shap_values[0],
+                base_values=explainer.expected_value,
+                feature_names=feature_names
+            ),
+            max_display=14,
+            show=False
+        )
+        st.pyplot(fig)
+        
+        # Retourner un dictionnaire avec les valeurs SHAP pour chaque feature
+        return dict(zip(feature_names, shap_values[0]))
+        
+    except Exception as e:
+        st.error(f"Erreur lors du calcul de l'importance locale: {e}")
+        return {}
 
 # --- Fonction pour créer une jauge simple ---
 def create_simple_gauge(probability):
@@ -167,8 +175,13 @@ st.set_page_config(
 
 st.title("🏦 Application de Prédiction de Défaut Client")
 
-# cgargement modèle
-model = mlflow.sklearn.load_model(MODEL_PATH)
+# Chargement modèle
+try:
+    model = mlflow.sklearn.load_model(MODEL_PATH)
+    st.success("✅ Modèle chargé avec succès")
+except Exception as e:
+    st.error(f"❌ Erreur lors du chargement du modèle: {e}")
+    model = None
 
 # Test de connectivité API
 with st.sidebar:
@@ -237,10 +250,11 @@ if all_data is not None:
                             st.success("✅ Ce client est prédit comme n'étant pas en défaut.")
                         
                         # Analyse des features si disponible
-                        if global_importance:
+                        if global_importance and model is not None:
                             st.subheader("📈 Analyse des Variables")
                             
-                            local_importance = calculate_local_feature_importance(model, client_data)
+                            # Fix: Use features_to_display instead of undefined client_data
+                            local_importance = calculate_local_feature_importance(model, features_to_display)
                             
                             # Créer un DataFrame pour l'affichage
                             df_analysis = pd.DataFrame([
@@ -248,7 +262,7 @@ if all_data is not None:
                                     'Variable': feature,
                                     'Valeur Client': value,
                                     'Importance Globale (%)': global_importance.get(feature, 0),
-                                    'Contribution Estimée': local_importance.get(feature, 0)
+                                    'Contribution Locale (SHAP)': local_importance.get(feature, 0)
                                 }
                                 for feature, value in features_to_display.items()
                             ]).sort_values('Importance Globale (%)', ascending=False)
@@ -258,6 +272,10 @@ if all_data is not None:
                             
                             # Tableau détaillé
                             st.dataframe(df_analysis, use_container_width=True)
+                        elif model is None:
+                            st.warning("⚠️ Modèle non disponible pour l'analyse des variables")
+                        else:
+                            st.warning("⚠️ Fichier d'importance globale non disponible")
                             
                     else:
                         st.warning("La réponse de l'API ne contient pas les clés 'prediction' ou 'probability'.")
