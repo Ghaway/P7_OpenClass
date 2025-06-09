@@ -171,17 +171,16 @@ def calculate_local_feature_importance(model, client_data):
 
 # --- Fonction pour créer une jauge simple ---
 def create_simple_gauge(probability):
-    """Crée une jauge simple avec des colonnes Streamlit."""
+    """Crée une jauge simple avec le seuil intégré visuellement."""
     score = probability * 100
+    seuil = 49  # Pour affichage et logique
 
-    if score < 49:  # Seuil ajusté à 49%
+    if score < seuil:
         color = "🟢"
         risk_level = "Faible"
-        color_class = "success"
     else:
         color = "🔴"
         risk_level = "Élevé"
-        color_class = "error"
 
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
@@ -189,8 +188,18 @@ def create_simple_gauge(probability):
         <div style="text-align: center; padding: 20px; border-radius: 10px; border: 2px solid #ddd;">
             <h2>{color} {score:.1f}%</h2>
             <p><strong>Risque: {risk_level}</strong></p>
-            <div style="background: linear-gradient(90deg, green 49%, red 49%); height: 20px; border-radius: 10px; margin: 10px 0;">
-                <div style="width: {score}%; height: 100%; background: rgba(0,0,0,0.3); border-radius: 10px;"></div>
+            <div style="position: relative; height: 25px; border-radius: 10px;
+                        background: linear-gradient(90deg, green {seuil}%, red {seuil}%); margin: 10px 0;">
+                
+                <!-- Remplissage du score -->
+                <div style="width: {score}%; height: 100%;
+                            background: rgba(0,0,0,0.3); border-radius: 10px;"></div>
+                
+                <!-- Marqueur de seuil -->
+                <div style="position: absolute; left: {seuil}%; top: -10px; transform: translateX(-50%);
+                            font-size: 12px; color: black;">
+                    ▲<br>Seuil
+                </div>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -342,6 +351,63 @@ if all_data is not None:
                             
                             # Tableau détaillé
                             st.dataframe(df_analysis, use_container_width=True)
+
+                            # --- Affichage Boxplots pour variables continues ---
+                            st.subheader("📦 Analyse par Boxplots (comparaison client vs population)")
+
+                            boxplot_json_path = "boxplot_stats.json"  # <- adapter si nécessaire
+                            continuous_vars = ["EXT_SOURCE_1", "EXT_SOURCE_2", "EXT_SOURCE_3", "cc_PERIODE_Y_sum_sum"]  # <- adapte à tes vraies variables continues
+
+                            try:
+                                with open(boxplot_json_path, "r") as f:
+                                    boxplot_stats = json.load(f)
+
+                                for var in continuous_vars:
+                                    if var not in boxplot_stats['0'] or var not in boxplot_stats['1']:
+                                        continue  # ignorer si une classe n’a pas la variable
+
+                                    fig, ax = plt.subplots()
+
+                                    # Préparer les stats de boxplot pour target 0 et 1
+                                    box_data = [
+                                        {
+                                            'med': boxplot_stats['0'][var]['median'],
+                                            'q1': boxplot_stats['0'][var]['q1'],
+                                            'q3': boxplot_stats['0'][var]['q3'],
+                                            'whislo': boxplot_stats['0'][var]['min'],
+                                            'whishi': boxplot_stats['0'][var]['max'],
+                                            'fliers': [],
+                                            'label': 'Target 0'
+                                        },
+                                        {
+                                            'med': boxplot_stats['1'][var]['median'],
+                                            'q1': boxplot_stats['1'][var]['q1'],
+                                            'q3': boxplot_stats['1'][var]['q3'],
+                                            'whislo': boxplot_stats['1'][var]['min'],
+                                            'whishi': boxplot_stats['1'][var]['max'],
+                                            'fliers': [],
+                                            'label': 'Target 1'
+                                        }
+                                    ]
+
+                                    ax.bxp(box_data, showfliers=False)
+                                    ax.set_title(f"{var} - Distribution selon la classe cible")
+                                    ax.set_ylabel(var)
+
+                                    # Ajouter la valeur du client comme ligne pointillée rouge
+                                    client_val = features_to_display.get(var)
+                                    if client_val is not None:
+                                        ax.axhline(client_val, color='red', linestyle='--', label='Valeur client')
+                                        ax.legend()
+
+                                    st.pyplot(fig)
+
+                            except FileNotFoundError:
+                                st.warning("📁 Fichier 'boxplot_stats.json' introuvable. Merci de le générer avec les stats.")
+                            except Exception as e:
+                                st.error(f"Erreur lors de l'affichage des boxplots : {e}")
+
+
                         elif model is None:
                             st.warning("⚠️ Modèle non disponible pour l'analyse des variables")
                         else:
