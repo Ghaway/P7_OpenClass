@@ -76,7 +76,7 @@ def calculate_local_feature_importance(model, client_data):
         if isinstance(model, Pipeline):
             # Obtenir le dernier step du pipeline (généralement le modèle)
             base_model = model.steps[-1][1]
-            st.info(f"Pipeline détecté, utilisation du modèle: {type(base_model).__name__}")
+            
         else:
             base_model = model
         
@@ -100,9 +100,7 @@ def calculate_local_feature_importance(model, client_data):
             explainer = shap.TreeExplainer(base_model)
             shap_values = explainer.shap_values(client_data_array)
 
-        # Afficher les informations de débogage
-        st.info(f"Forme des valeurs SHAP: {shap_values.shape if hasattr(shap_values, 'shape') else type(shap_values)}")
-        
+                
         # Gérer le cas où shap_values peut être une liste (classification binaire)
         if isinstance(shap_values, list):
             # Pour la classification binaire, prendre les valeurs de la classe positive (index 1)
@@ -143,8 +141,24 @@ def calculate_local_feature_importance(model, client_data):
         st.pyplot(fig)
         plt.close()
         
-        # Retourner un dictionnaire avec les valeurs SHAP pour chaque feature
-        return dict(zip(feature_names[:min_len], shap_values_to_plot[:min_len]))
+        # Calcul de l'importance locale normalisée (même méthode que pour l'importance globale)
+        local_importance_raw = dict(zip(feature_names[:min_len], shap_values_to_plot[:min_len]))
+        
+        # Normalisation en pourcentages (même méthode que pour l'importance globale)
+        # On prend la valeur absolue pour la normalisation
+        local_importance_abs = {k: abs(v) for k, v in local_importance_raw.items()}
+        total_local_importance = sum(local_importance_abs.values())
+        
+        if total_local_importance > 0:
+            local_importance_normalized = {k: (v/total_local_importance)*100 for k, v in local_importance_abs.items()}
+        else:
+            local_importance_normalized = {k: 0 for k in local_importance_abs.keys()}
+        
+        # Retourner à la fois les valeurs brutes et normalisées
+        return {
+            'raw': local_importance_raw,
+            'normalized': local_importance_normalized
+        }
         
     except Exception as e:
         st.error(f"Erreur lors du calcul de l'importance locale: {e}")
@@ -165,11 +179,25 @@ def calculate_local_feature_importance(model, client_data):
             else:
                 values = shap_values.values[0]
                 
-            return dict(zip(list(client_data.keys()), values))
+            local_importance_raw = dict(zip(list(client_data.keys()), values))
+            
+            # Normalisation
+            local_importance_abs = {k: abs(v) for k, v in local_importance_raw.items()}
+            total_local_importance = sum(local_importance_abs.values())
+            
+            if total_local_importance > 0:
+                local_importance_normalized = {k: (v/total_local_importance)*100 for k, v in local_importance_abs.items()}
+            else:
+                local_importance_normalized = {k: 0 for k in local_importance_abs.keys()}
+            
+            return {
+                'raw': local_importance_raw,
+                'normalized': local_importance_normalized
+            }
             
         except Exception as e2:
             st.error(f"Erreur avec l'explainer générique: {e2}")
-            return {}
+            return {'raw': {}, 'normalized': {}}
 
 # --- Fonction pour créer une jauge avec Plotly ---
 def create_plotly_gauge(probability):
@@ -346,8 +374,10 @@ if all_data is not None:
                         if global_importance and model is not None:
                             st.subheader("📈 Analyse des Variables")
                             
-                            # Fix: Use features_to_display instead of undefined client_data
-                            local_importance = calculate_local_feature_importance(model, features_to_display)
+                            # Calcul de l'importance locale
+                            local_importance_dict = calculate_local_feature_importance(model, features_to_display)
+                            local_importance_raw = local_importance_dict['raw']
+                            local_importance_normalized = local_importance_dict['normalized']
                             
                             # Créer un DataFrame pour l'affichage
                             df_analysis = pd.DataFrame([
@@ -355,15 +385,53 @@ if all_data is not None:
                                     'Variable': feature,
                                     'Valeur Client': value,
                                     'Importance Globale (%)': global_importance.get(feature, 0),
-                                    'Contribution Locale (SHAP)': local_importance.get(feature, 0)
+                                    'Importance Locale (%)': local_importance_normalized.get(feature, 0)
+                                    
                                 }
                                 for feature, value in features_to_display.items()
                             ]).sort_values('Importance Globale (%)', ascending=False)
                             
-                            # Graphique simple avec Streamlit
-                            st.bar_chart(df_analysis.set_index('Variable')['Importance Globale (%)'])
+                            # Graphique avec barres comparatives (Globale vs Locale)
+                            st.subheader("📊 Comparaison Importance Globale vs Locale")
+                            
+                            # Préparer les données pour le graphique
+                            chart_data = df_analysis.set_index('Variable')[['Importance Globale (%)', 'Importance Locale (%)']]
+                            
+                            # Créer le graphique avec Plotly pour plus de contrôle
+                            fig = go.Figure()
+                            
+                            # Ajouter les barres pour l'importance globale
+                            fig.add_trace(go.Bar(
+                                name='Importance Globale (%)',
+                                x=chart_data.index,
+                                y=chart_data['Importance Globale (%)'],
+                                marker_color='lightblue',
+                                opacity=0.8
+                            ))
+                            
+                            # Ajouter les barres pour l'importance locale
+                            fig.add_trace(go.Bar(
+                                name='Importance Locale (%)',
+                                x=chart_data.index,
+                                y=chart_data['Importance Locale (%)'],
+                                marker_color='orange',
+                                opacity=0.8
+                            ))
+                            
+                            # Mise à jour du layout
+                            fig.update_layout(
+                                title="Comparaison des Importances des Variables",
+                                xaxis_title="Variables",
+                                yaxis_title="Importance (%)",
+                                barmode='group',
+                                height=500,
+                                xaxis_tickangle=-45
+                            )
+                            
+                            st.plotly_chart(fig, use_container_width=True)
                             
                             # Tableau détaillé
+                            st.subheader("📋 Tableau Détaillé des Variables")
                             st.dataframe(df_analysis, use_container_width=True)
 
                             # --- Affichage Boxplots pour variables continues ---
