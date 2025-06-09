@@ -171,9 +171,9 @@ def calculate_local_feature_importance(model, client_data):
 
 # --- Fonction pour créer une jauge simple ---
 def create_simple_gauge(probability):
-    """Crée une jauge simple avec le seuil intégré visuellement."""
+    """Crée une jauge avec seuil intégré visuellement, sans casser le rendu."""
     score = probability * 100
-    seuil = 49  # Pour affichage et logique
+    seuil = 49
 
     if score < seuil:
         color = "🟢"
@@ -188,21 +188,21 @@ def create_simple_gauge(probability):
         <div style="text-align: center; padding: 20px; border-radius: 10px; border: 2px solid #ddd;">
             <h2>{color} {score:.1f}%</h2>
             <p><strong>Risque: {risk_level}</strong></p>
-            <div style="position: relative; height: 25px; border-radius: 10px;
-                        background: linear-gradient(90deg, green {seuil}%, red {seuil}%); margin: 10px 0;">
-                
-                <!-- Remplissage du score -->
+            <div style="position: relative; height: 20px; border-radius: 10px;
+                        background: linear-gradient(90deg, green {seuil}%, red {seuil}%);">
+                <!-- Bande de remplissage -->
                 <div style="width: {score}%; height: 100%;
-                            background: rgba(0,0,0,0.3); border-radius: 10px;"></div>
-                
-                <!-- Marqueur de seuil -->
-                <div style="position: absolute; left: {seuil}%; top: -10px; transform: translateX(-50%);
+                            background: rgba(0,0,0,0.2); border-radius: 10px;"></div>
+
+                <!-- Indicateur de seuil -->
+                <div style="position: absolute; left: {seuil}%; top: -18px; transform: translateX(-50%);
                             font-size: 12px; color: black;">
-                    ▲<br>Seuil
+                    ▲<br><span style="font-size: 11px;">Seuil {seuil}%</span>
                 </div>
             </div>
         </div>
         """, unsafe_allow_html=True)
+
 
 # --- Fonction pour appeler l'API ---
 def get_prediction_from_api(client_data):
@@ -362,45 +362,54 @@ if all_data is not None:
                                 with open(boxplot_json_path, "r") as f:
                                     boxplot_stats = json.load(f)
 
-                                for var in continuous_vars:
-                                    if var not in boxplot_stats['0'] or var not in boxplot_stats['1']:
-                                        continue  # ignorer si une classe n’a pas la variable
+                                from itertools import zip_longest
 
-                                    fig, ax = plt.subplots()
+                                # Groupes de 2 variables par ligne (2x2)
+                                grouped_vars = list(zip_longest(*(iter(continuous_vars),) * 2))
 
-                                    # Préparer les stats de boxplot pour target 0 et 1
-                                    box_data = [
-                                        {
-                                            'med': boxplot_stats['0'][var]['median'],
-                                            'q1': boxplot_stats['0'][var]['q1'],
-                                            'q3': boxplot_stats['0'][var]['q3'],
-                                            'whislo': boxplot_stats['0'][var]['min'],
-                                            'whishi': boxplot_stats['0'][var]['max'],
-                                            'fliers': [],
-                                            'label': 'Target 0'
-                                        },
-                                        {
-                                            'med': boxplot_stats['1'][var]['median'],
-                                            'q1': boxplot_stats['1'][var]['q1'],
-                                            'q3': boxplot_stats['1'][var]['q3'],
-                                            'whislo': boxplot_stats['1'][var]['min'],
-                                            'whishi': boxplot_stats['1'][var]['max'],
-                                            'fliers': [],
-                                            'label': 'Target 1'
-                                        }
-                                    ]
+                                for row_vars in grouped_vars:
+                                    cols = st.columns(2)
+                                    for i, var in enumerate(row_vars):
+                                        if var is None:
+                                            continue
 
-                                    ax.bxp(box_data, showfliers=False)
-                                    ax.set_title(f"{var} - Distribution selon la classe cible")
-                                    ax.set_ylabel(var)
+                                        with cols[i]:
+                                            if var not in boxplot_stats['0'] or var not in boxplot_stats['1']:
+                                                st.warning(f"{var} non trouvée dans le fichier de stats.")
+                                                continue
 
-                                    # Ajouter la valeur du client comme ligne pointillée rouge
-                                    client_val = features_to_display.get(var)
-                                    if client_val is not None:
-                                        ax.axhline(client_val, color='red', linestyle='--', label='Valeur client')
-                                        ax.legend()
+                                            fig, ax = plt.subplots(figsize=(4, 3))  # Réduction taille
 
-                                    st.pyplot(fig)
+                                            box_data = [
+                                                {
+                                                    'med': boxplot_stats['0'][var]['median'],
+                                                    'q1': boxplot_stats['0'][var]['q1'],
+                                                    'q3': boxplot_stats['0'][var]['q3'],
+                                                    'whislo': boxplot_stats['0'][var]['min'],
+                                                    'whishi': boxplot_stats['0'][var]['max'],
+                                                    'fliers': [],
+                                                    'label': 'Target 0'
+                                                },
+                                                {
+                                                    'med': boxplot_stats['1'][var]['median'],
+                                                    'q1': boxplot_stats['1'][var]['q1'],
+                                                    'q3': boxplot_stats['1'][var]['q3'],
+                                                    'whislo': boxplot_stats['1'][var]['min'],
+                                                    'whishi': boxplot_stats['1'][var]['max'],
+                                                    'fliers': [],
+                                                    'label': 'Target 1'
+                                                }
+                                            ]
+
+                                            ax.bxp(box_data, showfliers=False)
+                                            ax.set_title(var, fontsize=10)
+                                            ax.tick_params(axis='both', labelsize=8)
+                                            client_val = features_to_display.get(var)
+                                            if client_val is not None:
+                                                ax.axhline(client_val, color='red', linestyle='--', label='Client')
+                                                ax.legend(fontsize=8)
+
+                                            st.pyplot(fig)
 
                             except FileNotFoundError:
                                 st.warning("📁 Fichier 'boxplot_stats.json' introuvable. Merci de le générer avec les stats.")
