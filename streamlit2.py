@@ -171,33 +171,34 @@ def calculate_local_feature_importance(model, client_data):
 
 # --- Fonction pour créer une jauge simple ---
 def create_simple_gauge(probability):
-    """Crée une jauge simple avec des colonnes Streamlit."""
+    """Crée une jauge avec seuil intégré visuellement."""
     score = probability * 100
-    # Définition explicite du seuil. C'est une bonne pratique !
     threshold = 49
 
-    if score < threshold: # Utilisez la variable threshold ici
+    if score < threshold:
         color = "🟢"
         risk_level = "Faible"
-        # color_class n'est plus utilisé dans votre HTML actuel, vous pouvez l'enlever si vous voulez
-        # color_class = "success"
     else:
         color = "🔴"
         risk_level = "Élevé"
-        # color_class n'est plus utilisé
-        # color_class = "error"
 
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.markdown(f"""
         <div style="text-align: center; padding: 20px; border-radius: 10px; border: 2px solid #ddd;">
             <h2>{color} {score:.1f}%</h2>
-           
-            <p style="font-size: 0.9em; color: gray;">Seuil de risque : {threshold:.0f}%</p>
             <p><strong>Risque: {risk_level}</strong></p>
-            
-            <div style="background: linear-gradient(90deg, green {threshold}%, red {threshold}%); height: 20px; border-radius: 10px; margin: 10px 0;">
-                <div style="width: {score}%; height: 100%; background: rgba(0,0,0,0.3); border-radius: 10px;"></div>
+
+            <div style="position: relative; height: 22px; border-radius: 10px;
+                        background: linear-gradient(90deg, green {threshold}%, red {threshold}%); margin: 10px 0;">
+                <div style="width: {score}%; height: 100%;
+                            background: rgba(0,0,0,0.25); border-radius: 10px;"></div>
+
+                <!-- Repère du seuil -->
+                <div style="position: absolute; left: {threshold}%; top: -18px; transform: translateX(-50%);
+                            font-size: 11px; color: black; line-height: 1;">
+                    ▲<br>Seuil
+                </div>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -462,9 +463,9 @@ if all_data is not None:
 
                                             # Valeur client
                                             client_val = features_to_display.get(var)
-                                            if client_val in [0, 1]:
-                                                val_pct_0 = target0[str(client_val)]
-                                                val_pct_1 = target1[str(client_val)]
+                                            if if isinstance(client_val, (int, float)) and int(client_val) in [0, 1]:
+                                                client_key = str(int(client_val))                                                  val_pct_0 = target0.get(client_key, 0)
+                                                val_pct_1 = target1.get(client_key, 0)
                                                 ax.plot([client_val], [max(val_pct_0, val_pct_1)], 'ko', label="Client")
                                                 ax.annotate("Client", (client_val, max(val_pct_0, val_pct_1) + 2), ha="center", fontsize=8)
 
