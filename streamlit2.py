@@ -7,6 +7,8 @@ import os
 import mlflow.sklearn
 import shap
 import matplotlib.pyplot as plt
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 
 # --- Configuration ---
@@ -169,39 +171,60 @@ def calculate_local_feature_importance(model, client_data):
             st.error(f"Erreur avec l'explainer générique: {e2}")
             return {}
 
-# --- Fonction pour créer une jauge simple ---
-def create_simple_gauge(probability):
-    """Crée une jauge avec seuil intégré visuellement."""
+# --- Fonction pour créer une jauge avec Plotly ---
+def create_plotly_gauge(probability):
+    """Crée une jauge interactive avec Plotly."""
     score = probability * 100
     threshold = 49
 
+    # Déterminer la couleur et le niveau de risque
     if score < threshold:
-        color = "🟢"
+        color = "green"
         risk_level = "Faible"
+        risk_emoji = "🟢"
     else:
-        color = "🔴"
+        color = "red" 
         risk_level = "Élevé"
+        risk_emoji = "🔴"
 
-    col1, col2, col3 = st.columns([1, 2, 1])
+    # Créer la jauge avec Plotly
+    fig = go.Figure(go.Indicator(
+        mode = "gauge+number+delta",
+        value = score,
+        domain = {'x': [0, 1], 'y': [0, 1]},
+        title = {'text': f"{risk_emoji} Score de Risque de Défaut"},
+        delta = {'reference': threshold, 'position': "top"},
+        gauge = {
+            'axis': {'range': [None, 100], 'tickwidth': 1, 'tickcolor': "darkblue"},
+            'bar': {'color': color},
+            'bgcolor': "white",
+            'borderwidth': 2,
+            'bordercolor': "gray",
+            'steps': [
+                {'range': [0, threshold], 'color': 'lightgreen'},
+                {'range': [threshold, 100], 'color': 'lightcoral'}],
+            'threshold': {
+                'line': {'color': "black", 'width': 4},
+                'thickness': 0.75,
+                'value': threshold}
+        }
+    ))
+    
+    fig.update_layout(
+        height=400,
+        font={'color': "darkblue", 'family': "Arial"}
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Afficher le niveau de risque
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Probabilité de Défaut", f"{probability:.1%}")
     with col2:
-        st.markdown(f"""
-        <div style="text-align: center; padding: 20px; border-radius: 10px; border: 2px solid #ddd;">
-            <h2>{color} {score:.1f}%</h2>
-            <p><strong>Risque: {risk_level}</strong></p>
-
-            <div style="position: relative; height: 22px; border-radius: 10px;
-                        background: linear-gradient(90deg, green {threshold}%, red {threshold}%); margin: 10px 0;">
-                <div style="width: {score}%; height: 100%;
-                            background: rgba(0,0,0,0.25); border-radius: 10px;"></div>
-
-                <!-- Repère du seuil -->
-                <div style="position: absolute; left: {threshold}%; top: -18px; transform: translateX(-50%);
-                            font-size: 11px; color: black; line-height: 1;">
-                    ▲<br>Seuil
-                </div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.metric("Seuil", "49%")
+    with col3:
+        st.metric("Niveau de Risque", f"{risk_emoji} {risk_level}")
 
 
 # --- Fonction pour appeler l'API ---
@@ -309,18 +332,10 @@ if all_data is not None:
 
                     if prediction is not None and probability is not None:
                         
-                        # Jauge de score simple
+                        # Jauge de score avec Plotly
                         st.subheader("🎯 Score de Risque")
-                        create_simple_gauge(probability)
+                        create_plotly_gauge(probability)
                         
-                        # Métriques
-                        col1, col2, col3 = st.columns(3)
-                        with col1:
-                            st.metric("Probabilité de Défaut", f"{probability:.1%}")
-                        with col2:
-                            st.metric("Seuil", "49%")
-                        with col3:
-                            st.metric("Prédiction", "Défaut" if prediction == 1 else "Pas de défaut")
                         # Status
                         if prediction == 1:
                             st.error("⚠️ Ce client est prédit comme étant en défaut.")
@@ -415,11 +430,10 @@ if all_data is not None:
                             except Exception as e:
                                 st.error(f"Erreur lors de l'affichage des boxplots : {e}")
                             
-                            # --- Affichage des distributions booléennes ---
+                            # --- Affichage des distributions booléennes CORRIGÉ ---
                             st.subheader("📊 Analyse des Variables Booléennes (par classe cible)")
 
                             bool_stats_path = "bool_stats.json"
-                            # bool_vars = [var for var in features_to_display.keys() if var not in continuous_vars]  # ou déjà défini plus haut
                             bool_vars = [var for var in features_to_display.keys() if features_to_display[var] in [0, 1] and var not in continuous_vars]
 
                             try:
@@ -451,24 +465,44 @@ if all_data is not None:
                                             x = np.arange(len(df_plot["Valeur"]))
 
                                             # Barres
-                                            ax.bar(x - width/2, df_plot["Target 0 (%)"], width=width, color="green", label="Target 0")
-                                            ax.bar(x + width/2, df_plot["Target 1 (%)"], width=width, color="red", label="Target 1")
+                                            bars1 = ax.bar(x - width/2, df_plot["Target 0 (%)"], width=width, color="green", label="Target 0")
+                                            bars2 = ax.bar(x + width/2, df_plot["Target 1 (%)"], width=width, color="red", label="Target 1")
 
                                             ax.set_xticks(x)
                                             ax.set_xticklabels(["0", "1"])
                                             ax.set_ylim(0, 100)
                                             ax.set_ylabel("Pourcentage")
                                             ax.set_title(var, fontsize=10)
-                                            ax.legend(fontsize=8)
-
-                                            # Valeur client
+                                            
+                                            # Ajouter la valeur client dans la légende
                                             client_val = features_to_display.get(var)
                                             if isinstance(client_val, (int, float)) and int(client_val) in [0, 1]:
-                                                client_key = str(int(client_val))                                                  
-                                                val_pct_0 = target0.get(client_key, 0)
-                                                val_pct_1 = target1.get(client_key, 0)
-                                                ax.plot([client_val], [max(val_pct_0, val_pct_1)], 'ko', label="Client")
-                                                ax.annotate("Client", (client_val, max(val_pct_0, val_pct_1) + 2), ha="center", fontsize=8)
+                                                client_val_int = int(client_val)
+                                                # Modifier les labels pour inclure la valeur client
+                                                legend_labels = ["Target 0", "Target 1", f"Client: {client_val_int}"]
+                                                
+                                                # Highlighting the client's bar with a border
+                                                if client_val_int == 0:
+                                                    bars1[0].set_edgecolor('black')
+                                                    bars1[0].set_linewidth(3)
+                                                    bars2[0].set_edgecolor('black') 
+                                                    bars2[0].set_linewidth(3)
+                                                else:
+                                                    bars1[1].set_edgecolor('black')
+                                                    bars1[1].set_linewidth(3)
+                                                    bars2[1].set_edgecolor('black')
+                                                    bars2[1].set_linewidth(3)
+                                                
+                                                # Créer une légende personnalisée
+                                                from matplotlib.patches import Rectangle
+                                                legend_elements = [
+                                                    Rectangle((0, 0), 1, 1, facecolor='green', label='Target 0'),
+                                                    Rectangle((0, 0), 1, 1, facecolor='red', label='Target 1'),
+                                                    Rectangle((0, 0), 1, 1, facecolor='none', edgecolor='black', linewidth=3, label=f'Client: {client_val_int}')
+                                                ]
+                                                ax.legend(handles=legend_elements, fontsize=8)
+                                            else:
+                                                ax.legend(fontsize=8)
 
                                             st.pyplot(fig)
 
