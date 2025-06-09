@@ -192,10 +192,10 @@ def create_simple_gauge(probability):
         st.markdown(f"""
         <div style="text-align: center; padding: 20px; border-radius: 10px; border: 2px solid #ddd;">
             <h2>{color} {score:.1f}%</h2>
-            {/* Nouvelle ligne pour afficher le seuil */}
+           
             <p style="font-size: 0.9em; color: gray;">Seuil de risque : {threshold:.0f}%</p>
             <p><strong>Risque: {risk_level}</strong></p>
-            {/* Le gradient utilise aussi la variable threshold maintenant */}
+            
             <div style="background: linear-gradient(90deg, green {threshold}%, red {threshold}%); height: 20px; border-radius: 10px; margin: 10px 0;">
                 <div style="width: {score}%; height: 100%; background: rgba(0,0,0,0.3); border-radius: 10px;"></div>
             </div>
@@ -317,10 +317,9 @@ if all_data is not None:
                         with col1:
                             st.metric("Probabilité de Défaut", f"{probability:.1%}")
                         with col2:
-                            st.metric("Prédiction", "Défaut" if prediction == 1 else "Pas de défaut")
-                        with col3:
                             st.metric("Seuil", "49%")
-                        
+                        with col3:
+                            st.metric("Prédiction", "Défaut" if prediction == 1 else "Pas de défaut")
                         # Status
                         if prediction == 1:
                             st.error("⚠️ Ce client est prédit comme étant en défaut.")
