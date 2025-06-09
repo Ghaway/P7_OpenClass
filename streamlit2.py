@@ -171,16 +171,17 @@ def calculate_local_feature_importance(model, client_data):
 
 # --- Fonction pour créer une jauge simple ---
 def create_simple_gauge(probability):
-    """Crée une jauge avec seuil intégré visuellement, sans casser le rendu."""
+    """Crée une jauge simple avec des colonnes Streamlit."""
     score = probability * 100
-    seuil = 49
 
-    if score < seuil:
+    if score < 49:  # Seuil ajusté à 49%
         color = "🟢"
         risk_level = "Faible"
+        color_class = "success"
     else:
         color = "🔴"
         risk_level = "Élevé"
+        color_class = "error"
 
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
@@ -188,17 +189,8 @@ def create_simple_gauge(probability):
         <div style="text-align: center; padding: 20px; border-radius: 10px; border: 2px solid #ddd;">
             <h2>{color} {score:.1f}%</h2>
             <p><strong>Risque: {risk_level}</strong></p>
-            <div style="position: relative; height: 20px; border-radius: 10px;
-                        background: linear-gradient(90deg, green {seuil}%, red {seuil}%);">
-                <!-- Bande de remplissage -->
-                <div style="width: {score}%; height: 100%;
-                            background: rgba(0,0,0,0.2); border-radius: 10px;"></div>
-
-                <!-- Indicateur de seuil -->
-                <div style="position: absolute; left: {seuil}%; top: -18px; transform: translateX(-50%);
-                            font-size: 12px; color: black;">
-                    ▲<br><span style="font-size: 11px;">Seuil {seuil}%</span>
-                </div>
+            <div style="background: linear-gradient(90deg, green 49%, red 49%); height: 20px; border-radius: 10px; margin: 10px 0;">
+                <div style="width: {score}%; height: 100%; background: rgba(0,0,0,0.3); border-radius: 10px;"></div>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -415,6 +407,67 @@ if all_data is not None:
                                 st.warning("📁 Fichier 'boxplot_stats.json' introuvable. Merci de le générer avec les stats.")
                             except Exception as e:
                                 st.error(f"Erreur lors de l'affichage des boxplots : {e}")
+                            
+                            # --- Affichage des distributions booléennes ---
+                            st.subheader("📊 Analyse des Variables Booléennes (par classe cible)")
+
+                            bool_stats_path = "bool_stats.json"
+                            # bool_vars = [var for var in features_to_display.keys() if var not in continuous_vars]  # ou déjà défini plus haut
+                            bool_vars = [var for var in features_to_display.keys() if features_to_display[var] in [0, 1] and var not in continuous_vars]
+
+                            try:
+                                with open(bool_stats_path, "r", encoding="utf-8") as f:
+                                    bool_stats = json.load(f)
+
+                                # Affichage en grille 2x2
+                                from itertools import zip_longest
+                                grouped_bools = list(zip_longest(*(iter(bool_vars),) * 2))
+
+                                for row_vars in grouped_bools:
+                                    cols = st.columns(2)
+                                    for i, var in enumerate(row_vars):
+                                        if var is None or var not in bool_stats['0'] or var not in bool_stats['1']:
+                                            continue
+
+                                        with cols[i]:
+                                            target0 = bool_stats['0'][var]
+                                            target1 = bool_stats['1'][var]
+
+                                            df_plot = pd.DataFrame({
+                                                "Valeur": [0, 1],
+                                                "Target 0 (%)": [target0["0"], target0["1"]],
+                                                "Target 1 (%)": [target1["0"], target1["1"]]
+                                            })
+
+                                            fig, ax = plt.subplots(figsize=(4, 3))
+                                            width = 0.35
+                                            x = np.arange(len(df_plot["Valeur"]))
+
+                                            # Barres
+                                            ax.bar(x - width/2, df_plot["Target 0 (%)"], width=width, color="green", label="Target 0")
+                                            ax.bar(x + width/2, df_plot["Target 1 (%)"], width=width, color="red", label="Target 1")
+
+                                            ax.set_xticks(x)
+                                            ax.set_xticklabels(["0", "1"])
+                                            ax.set_ylim(0, 100)
+                                            ax.set_ylabel("Pourcentage")
+                                            ax.set_title(var, fontsize=10)
+                                            ax.legend(fontsize=8)
+
+                                            # Valeur client
+                                            client_val = features_to_display.get(var)
+                                            if client_val in [0, 1]:
+                                                val_pct_0 = target0[str(client_val)]
+                                                val_pct_1 = target1[str(client_val)]
+                                                ax.plot([client_val], [max(val_pct_0, val_pct_1)], 'ko', label="Client")
+                                                ax.annotate("Client", (client_val, max(val_pct_0, val_pct_1) + 2), ha="center", fontsize=8)
+
+                                            st.pyplot(fig)
+
+                            except FileNotFoundError:
+                                st.warning("📁 Fichier 'bool_stats.json' introuvable.")
+                            except Exception as e:
+                                st.error(f"Erreur lors de l'affichage des booléennes : {e}")
 
 
                         elif model is None:
