@@ -173,23 +173,30 @@ def calculate_local_feature_importance(model, client_data):
 def create_simple_gauge(probability):
     """Crée une jauge simple avec des colonnes Streamlit."""
     score = probability * 100
+    # Définition explicite du seuil. C'est une bonne pratique !
+    threshold = 49
 
-    if score < 49:  # Seuil ajusté à 49%
+    if score < threshold: # Utilisez la variable threshold ici
         color = "🟢"
         risk_level = "Faible"
-        color_class = "success"
+        # color_class n'est plus utilisé dans votre HTML actuel, vous pouvez l'enlever si vous voulez
+        # color_class = "success"
     else:
         color = "🔴"
         risk_level = "Élevé"
-        color_class = "error"
+        # color_class n'est plus utilisé
+        # color_class = "error"
 
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.markdown(f"""
         <div style="text-align: center; padding: 20px; border-radius: 10px; border: 2px solid #ddd;">
             <h2>{color} {score:.1f}%</h2>
+            {/* Nouvelle ligne pour afficher le seuil */}
+            <p style="font-size: 0.9em; color: gray;">Seuil de risque : {threshold:.0f}%</p>
             <p><strong>Risque: {risk_level}</strong></p>
-            <div style="background: linear-gradient(90deg, green 49%, red 49%); height: 20px; border-radius: 10px; margin: 10px 0;">
+            {/* Le gradient utilise aussi la variable threshold maintenant */}
+            <div style="background: linear-gradient(90deg, green {threshold}%, red {threshold}%); height: 20px; border-radius: 10px; margin: 10px 0;">
                 <div style="width: {score}%; height: 100%; background: rgba(0,0,0,0.3); border-radius: 10px;"></div>
             </div>
         </div>
