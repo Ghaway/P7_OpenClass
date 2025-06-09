@@ -464,7 +464,8 @@ if all_data is not None:
                                             # Valeur client
                                             client_val = features_to_display.get(var)
                                             if isinstance(client_val, (int, float)) and int(client_val) in [0, 1]:
-                                                client_key = str(int(client_val))                                                  val_pct_0 = target0.get(client_key, 0)
+                                                client_key = str(int(client_val))                                                  
+                                                val_pct_0 = target0.get(client_key, 0)
                                                 val_pct_1 = target1.get(client_key, 0)
                                                 ax.plot([client_val], [max(val_pct_0, val_pct_1)], 'ko', label="Client")
                                                 ax.annotate("Client", (client_val, max(val_pct_0, val_pct_1) + 2), ha="center", fontsize=8)
