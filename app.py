@@ -7,6 +7,7 @@ import traceback
 import logging
 import shap # Importez SHAP ici
 from sklearn.pipeline import Pipeline # Importez Pipeline pour gérer les modèles scikit-learn
+import numpy as np
 
 # === Configuration ===
 MODEL_PATH = os.environ.get('MODEL_PATH', 'file://mlflow_model')
