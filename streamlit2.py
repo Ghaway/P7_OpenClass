@@ -1,4 +1,3 @@
-```python
 import streamlit as st
 import json, requests
 import pandas as pd, numpy as np
@@ -63,9 +62,8 @@ def call_api(url, payload, timeout=30):
 def show_gauge(prob):
     score = prob * 100
     thresh = 49
-    # Couleurs à contraste élevé
-    low_color  = "#00429d"  # bleu foncé
-    high_color = "#b30000"  # rouge foncé
+    low_color  = "#00429d"  # contraste élevé
+    high_color = "#b30000"
     bar_color  = low_color if score < thresh else high_color
     emoji      = "🟢" if score < thresh else "🔴"
 
@@ -88,14 +86,10 @@ def show_gauge(prob):
             "threshold": {"line": {"color": "#000000", "width": 4}, "value": thresh}
         }
     ))
-    fig.update_layout(
-        font={"size": 16, "family": "Arial"},  # texte redimensionnable
-        autosize=True
-    )
+    fig.update_layout(font={"size": 16, "family": "Arial"}, autosize=True)
     st.plotly_chart(fig, use_container_width=True)
     st.caption(
-        "Figure : jauge interactive montrant le score de risque en pourcentage. "
-        "Bleu (<49%) indique faible risque, rouge (≥49%) indique risque élevé."
+        "Figure : jauge interactive affichant le score de risque (%) ; bleu (<49%) = faible, rouge (≥49%) = élevé."
     )
 
 # --- Importances SHAP + comparatif accessible ---
@@ -110,134 +104,10 @@ def show_importances(client_payload):
     features = list(shap_vals.keys())
     arr_vals = np.array([shap_vals[f] for f in features])
 
-    # Waterfall SHAP
     st.subheader("🔱 Waterfall SHAP")
     fig, ax = plt.subplots(figsize=(8, 4))
     shap.plots.waterfall(
         shap.Explanation(values=arr_vals, base_values=base_val, feature_names=features),
         max_display=10, show=False
     )
-    st.pyplot(fig)
-    plt.close(fig)
-    st.caption(
-        "Diagramme en cascade des valeurs SHAP, montrant l’impact de chaque variable."
-    )
-
-    # Normalisation locale
-    abs_imp = {f: abs(v) for f, v in shap_vals.items()}
-    total   = sum(abs_imp.values()) or 1
-    norm_imp = {f: abs_imp[f] / total * 100 for f in features}
-
-    df = pd.DataFrame([
-        {
-            "Variable": f,
-            "Valeur client": client_payload[f],
-            "Importance globale (%)": global_imp.get(f, 0),
-            "Importance locale (%)": norm_imp[f]
-        }
-        for f in features
-    ]).sort_values("Importance globale (%)", ascending=False)
-
-    # Barre groupée accessible
-    st.subheader("📊 Comparaison Globale vs Locale")
-    fig2 = go.Figure()
-    fig2.add_trace(go.Bar(
-        x=df["Variable"], y=df["Importance globale (%)"],
-        name="Globale (%)",
-        marker_color="#1f77b4",  # bleu
-        marker_pattern={"shape": "/"},
-        opacity=0.9
-    ))
-    fig2.add_trace(go.Bar(
-        x=df["Variable"], y=df["Importance locale (%)"],
-        name="Locale (%)",
-        marker_color="#ff7f0e",  # orange
-        marker_pattern={"shape": "x"},
-        opacity=0.9
-    ))
-    fig2.update_layout(
-        barmode="group",
-        xaxis_tickangle=-45,
-        font={"size": 16},
-        legend={"font": {"size": 14}}
-    )
-    st.plotly_chart(fig2, use_container_width=True)
-    st.caption(
-        "Histogramme comparant l’importance globale (hachures '/') et locale (motif 'x')."
-    )
-
-    # Tableau détaillé
-    st.subheader("📋 Tableau détaillé")
-    st.dataframe(df, use_container_width=True)
-
-# --- Analyse population accessible ---
-def show_population(var, client):
-    st.subheader(f"Analyse population pour : {var}")
-    if var in boxplot.get("0", {}):
-        stats0 = boxplot["0"][var]
-        stats1 = boxplot["1"][var]
-        fig, ax = plt.subplots(figsize=(6, 4))
-        ax.bxp(
-            [dict(label="No-def", **stats0), dict(label="Def", **stats1)],
-            showfliers=False
-        )
-        ax.axhline(client[var], color="red", linestyle="--", linewidth=2)
-        ax.set_title(var, fontsize=16)
-        ax.tick_params(axis="both", labelsize=14)
-        st.pyplot(fig)
-        st.caption(
-            f"Boxplot comparant la distribution de '{var}' pour défaut=0 et défaut=1. "
-            "La ligne rouge indique la valeur du client."
-        )
-    else:
-        st.warning("Variable non disponible pour l’analyse population.")
-
-# --- Vérifications initiales ---
-if not clients:
-    st.stop()
-
-data_by_id = {c["id"]: c for c in clients if isinstance(c, dict) and "id" in c}
-if not data_by_id:
-    st.error("Aucun client valide chargé (pas d’ID trouvé).")
-    st.stop()
-
-# --- Sélection client & options ---
-client_id = st.sidebar.selectbox("Sélection Client (ID)", sorted(data_by_id.keys()))
-client    = data_by_id[client_id]
-sel_opts  = st.sidebar.multiselect(
-    "Choisissez vos analyses",
-    ["Score", "Importances", "Population"]
-)
-
-# --- Exécution des analyses ---
-if sel_opts:
-    payload = {k: v for k, v in client.items() if k != "id"}
-    pr = call_api(API_PREDICT, payload)
-    prob = pr.get("probability", 0)
-    pred = pr.get("prediction", 0)
-
-    if "Score" in sel_opts:
-        show_gauge(prob)
-        st.write(
-            "✅ Aucun défaut prévu" if pred == 0 else "⚠️ Défaut prévu"
-        )
-
-    if "Importances" in sel_opts:
-        show_importances(payload)
-
-    if "Population" in sel_opts:
-        var = st.selectbox(
-            "Variable population",
-            [v for v in client if v in boxplot.get("0", {})]
-        )
-        show_population(var, client)
-else:
-    st.info("Sélectionnez une ou plusieurs analyses dans la barre latérale.")
-
-# --- Données brutes ---
-with st.expander("Données brutes du client"):
-    st.write(
-        "Les données JSON suivantes correspondent aux features utilisées pour la prédiction."
-    )
-    st.json(client)
-```
+    st.pyplot
