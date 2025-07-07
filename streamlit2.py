@@ -1,560 +1,364 @@
 import streamlit as st
-import json
-import requests
-import pandas as pd
-import numpy as np
-import os
-import mlflow.sklearn
-import shap
-import matplotlib.pyplot as plt
+import json, requests
+import pandas as pd, numpy as np
+import shap, matplotlib.pyplot as plt
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 
+# ── 2.4.2 – Configuration de la page ───────────────────────────────────────────
+st.set_page_config(
+    page_title="Prédiction de Défaut Client ",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+st.title("🏦 Application de Prédiction de Défaut Client ")
 
-# --- Configuration ---
-MODEL_PATH = os.environ.get('MODEL_PATH', 'file://mlflow_model')
-DATA_FILE = 'first_5_rows.json'
-FEATURE_IMPORTANCE_FILE = 'feature_importance_global.json'
-API_URL = "https://p7-openclass.onrender.com/predict" # URL de l'API de prédiction
-SHAP_API_URL = "https://p7-openclass.onrender.com/shap_values" # Nouvelle URL pour l'API SHAP
+# ── Fichiers & Endpoints ───────────────────────────────────────────────────────
+DATA_FILE       = "first_5_rows.json"
+FEATURE_FILE    = "feature_importance_global.json"
+BOX_FILE        = "boxplot_stats.json"
+BOOL_FILE       = "bool_stats.json"
+BIVAR_FILE      = "bivariate_discrete.json"
+API_PREDICT     = "https://p7-openclass.onrender.com/predict"
+API_SHAP_VALUES = "https://p7-openclass.onrender.com/shap_values"
 
-
-# --- Chargement des données ---
+# ── 1.4.4 – Chargement des JSON ────────────────────────────────────────────────
 @st.cache_data
-def load_data(filepath):
-    """Charge les données depuis un fichier JSON et assigne un ID basé sur l'index."""
+def load_json_list(path):
     try:
-        with open(filepath, 'r', encoding='utf-8') as f:
+        with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
-
         if not isinstance(data, list):
-             st.error(f"Erreur : Le contenu du fichier '{filepath}' n'est pas une liste JSON.")
-             return {}
-
-        processed_data = []
-        for index, item in enumerate(data):
-            if isinstance(item, dict):
-                if 'id' not in item:
-                    item['id'] = index + 1
-                processed_data.append(item)
-            else:
-                st.warning(f"Ignoré un élément non-dictionnaire à l'index {index} : {item}")
-
-        if not processed_data:
-             st.error(f"Aucune donnée valide trouvée dans le fichier '{filepath}'.")
-             return {}
-
-        return processed_data
-
-    except FileNotFoundError:
-        st.error(f"Erreur : Le fichier de données '{filepath}' non trouvé.")
-        return {}
-    except json.JSONDecodeError:
-        st.error(f"Erreur : Impossible de décoder le fichier JSON '{filepath}'. Vérifiez sa syntaxe.")
-        return {}
+            st.error(f"{path} ne contient pas une liste JSON.")
+            return []
+        # Ajout d'un ID si manquant
+        for idx, rec in enumerate(data):
+            if isinstance(rec, dict) and "id" not in rec:
+                rec["id"] = idx + 1
+        return data
     except Exception as e:
-        st.error(f"Une erreur inattendue est survenue lors du chargement des données : {e}")
-        return {}
+        st.error(f"Erreur de chargement {path} : {e}")
+        return []
 
-@st.cache_data
-def load_global_feature_importance():
-    """Charge l'importance globale des features."""
+clients     = load_json_list(DATA_FILE)
+global_imp  = load_json_list(FEATURE_FILE) if False else json.load(open(FEATURE_FILE))  
+# (on chargera FEATURE_FILE autrement, car c'est dict)
+with open(FEATURE_FILE, "r", encoding="utf-8") as f: global_imp = json.load(f)
+with open(BOX_FILE,    "r", encoding="utf-8") as f: boxplot    = json.load(f)
+with open(BOOL_FILE,   "r", encoding="utf-8") as f: boolstats  = json.load(f)
+with open("bivariate_discrete.json", "r", encoding="utf-8") as f:
+    bivar_data = json.load(f)
+# ── API call generic ───────────────────────────────────────────────────────────
+def call_api(url, payload, timeout=30):
     try:
-        with open(FEATURE_IMPORTANCE_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except FileNotFoundError:
-        st.warning(f"Fichier d'importance globale '{FEATURE_IMPORTANCE_FILE}' non trouvé.")
-        return {}
-    except json.JSONDecodeError:
-        st.error(f"Erreur de décodage du fichier '{FEATURE_IMPORTANCE_FILE}'.")
-        return {}
-
-# --- Fonction pour appeler l'API SHAP et calculer l'importance locale ---
-# La fonction calculate_local_feature_importance est modifiée pour appeler l'API
-def get_local_feature_importance_from_api(client_data):
-    """Appelle l'API pour obtenir les valeurs SHAP et calcule l'importance locale."""
-    try:
-        with st.spinner('Calcul de l\'importance locale via API...'):
-            response = requests.post(SHAP_API_URL, json=client_data, timeout=60) # Augmenter le timeout si nécessaire
-            response.raise_for_status() # Lève une exception pour les codes d'erreur HTTP
-
-            api_result = response.json()
-            
-            if "shap_values" in api_result and "expected_value" in api_result:
-                shap_values_raw = api_result["shap_values"]
-                expected_value = api_result["expected_value"]
-                
-                # Convertir les valeurs SHAP en numpy array et obtenir les noms de features dans le bon ordre
-                feature_names = list(shap_values_raw.keys())
-                shap_values_array = np.array([shap_values_raw[feature] for feature in feature_names])
-                
-                # Créer le graphique en cascade (Waterfall Plot)
-                st.subheader("SHAP Waterfall Plot")
-                fig, ax = plt.subplots(figsize=(10, 6))
-                
-                shap.plots.waterfall(
-                    shap.Explanation(
-                        values=shap_values_array,
-                        base_values=expected_value,
-                        feature_names=feature_names
-                    ),
-                    max_display=min(14, len(feature_names)),
-                    show=False
-                )
-                st.pyplot(fig)
-                plt.close()
-                
-                # Calcul de l'importance locale normalisée (en pourcentages)
-                local_importance_abs = {k: abs(v) for k, v in shap_values_raw.items()}
-                total_local_importance = sum(local_importance_abs.values())
-                
-                if total_local_importance > 0:
-                    local_importance_normalized = {k: (v/total_local_importance)*100 for k, v in local_importance_abs.items()}
-                else:
-                    local_importance_normalized = {k: 0 for k in local_importance_abs.keys()}
-                
-                return {
-                    'raw': shap_values_raw,
-                    'normalized': local_importance_normalized
-                }
-            else:
-                st.error("La réponse de l'API SHAP est invalide (manque 'shap_values' ou 'expected_value').")
-                st.json(api_result)
-                return {'raw': {}, 'normalized': {}}
-
-    except requests.exceptions.ConnectionError:
-        st.error(f"Erreur de connexion à l'API SHAP. Assurez-vous que l'API est en cours d'exécution à l'adresse {SHAP_API_URL}.")
-        return None
-    except requests.exceptions.HTTPError as e:
-        error_msg = f"Erreur de l'API SHAP: {e}"
-        st.error(error_msg)
-        st.json(response.json()) # Affiche le message d'erreur de l'API
-        return None
-    except requests.exceptions.Timeout:
-        st.error("Timeout: L'API SHAP met trop de temps à répondre.")
-        return None
-    except requests.exceptions.RequestException as e:
-        st.error(f"Erreur lors de l'appel à l'API SHAP : {e}")
-        return None
+        r = requests.post(url, json=payload, timeout=timeout)
+        r.raise_for_status()
+        return r.json()
     except Exception as e:
-        st.error(f"Une erreur inattendue est survenue lors du traitement des valeurs SHAP : {e}")
-        return None
+        st.error(f"Erreur API ({url}) : {e}")
+        return {}
 
+# ── Fonctions d’affichage ───────────────────────────────────────────────────────
 
-# --- Fonction pour créer une jauge avec Plotly ---
-def create_plotly_gauge(probability):
-    """Crée une jauge interactive avec Plotly."""
-    score = probability * 100
-    threshold = 49
+def show_gauge(prob):
+    st.subheader("🎯 Score de Risque")
+    score, thresh = prob * 100, 49
+    low_c, high_c = "#00429d", "#b30000"   # 1.4.3
+    bar_c = low_c if score < thresh else high_c
+    emoji = "🟢" if score < thresh else "🔴"
+    risk_level = "Faible" if score < thresh else "Élevé"
 
-    # Déterminer la couleur et le niveau de risque
-    if score < threshold:
-        color = "green"
-        risk_level = "Faible"
-        risk_emoji = "🟢"
-    else:
-        color = "red"
-        risk_level = "Élevé"
-        risk_emoji = "🔴"
-
-    # Créer la jauge avec Plotly
     fig = go.Figure(go.Indicator(
-        mode = "gauge+number+delta",
-        value = score,
-        domain = {'x': [0, 1], 'y': [0, 1]},
-        title = {'text': f"{risk_emoji} Score de Risque de défaut"},
-        delta = {'reference': threshold, 'position': "top"},
-        gauge = {
-            'axis': {'range': [None, 100], 'tickwidth': 1, 'tickcolor': "darkblue"},
-            'bar': {'color': color},
-            'bgcolor': "white",
-            'borderwidth': 2,
-            'bordercolor': "gray",
-            'steps': [
-                {'range': [0, threshold], 'color': 'lightgreen'},
-                {'range': [threshold, 100], 'color': 'lightcoral'}],
-            'threshold': {
-                'line': {'color': "black", 'width': 4},
-                'thickness': 0.75,
-                'value': threshold}
+        mode="gauge+number+delta",
+        value=score,
+        title={"text": f"{emoji} Niveau de Risque"},
+        delta={"reference": thresh,
+               "increasing": {"color": high_c},
+               "decreasing": {"color": low_c}},
+        gauge={
+            "axis": {"range": [0,100], "tickfont": {"size": 14}},
+            "bar": {"color": bar_c},
+            "steps": [
+                {"range": [0, thresh],   "color": "#006400"},
+                {"range": [thresh,100],  "color": "#8B0000"}
+            ],
+            "threshold": {"line": {"color":"#000","width":4}, "value": thresh}
         }
     ))
-    
-    fig.update_layout(
-        height=400,
-        font={'color': "darkblue", 'family': "Arial"}
-    )
-    
+    fig.update_layout(font={"size":16,"family":"Arial"}, autosize=True)  # 1.4.4
+
     st.plotly_chart(fig, use_container_width=True)
     
     # Afficher le niveau de risque
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric("Probabilité de Défaut", f"{probability:.1%}")
+        st.metric("Probabilité de Défaut", f"{prob:.1%}")
     with col2:
         st.metric("Seuil", "49%")
     with col3:
-        st.metric("Niveau de Risque", f"{risk_emoji} {risk_level}")
-
-
-# --- Fonction pour appeler l'API de prédiction ---
-def get_prediction_from_api(client_data):
-    """Envoie les données client à l'API Flask et retourne la prédiction."""
-    required_fields = [
-        "NAME_INCOME_TYPE_Working", "EXT_SOURCE_2", "NAME_EDUCATION_TYPE_Higher education",
-        "NAME_EDUCATION_TYPE_Secondary / secondary special", "cc_PERIODE_Y_sum_sum", 
-        "FLAG_EMP_PHONE", "EXT_SOURCE_1", "EXT_SOURCE_3", "FLAG_DOCUMENT_3", 
-        "CODE_GENDER", "FLAG_OWN_CAR"
-    ]
+        st.metric("Niveau de Risque", f"{emoji} {risk_level}")
     
-    missing_fields = [field for field in required_fields if field not in client_data]
     
-    if missing_fields:
-        error_msg = f"Les données client manquent les champs suivants requis par l'API : {', '.join(missing_fields)}"
-        st.error(error_msg)
-        return None
     
-    try:
-        with st.spinner('Appel à l\'API en cours...'):
-            response = requests.post(API_URL, json=client_data, timeout=30)
-            response.raise_for_status()
-            return response.json()
-    except requests.exceptions.ConnectionError:
-        st.error(f"Erreur de connexion à l'API Flask. Assurez-vous que l'API est en cours d'exécution à l'adresse {API_URL}.")
-        return None
-    except requests.exceptions.HTTPError as e:
-        error_msg = f"Erreur de l'API: {e}"
-        st.error(error_msg)
-        return None
-    except requests.exceptions.Timeout:
-        st.error("Timeout: L'API met trop de temps à répondre.")
-        return None
-    except requests.exceptions.RequestException as e:
-        st.error(f"Erreur lors de l'appel à l'API : {e}")
-        return None
+    st.caption("Jauge : vert (<49 %) = faible risqué, rouge (≥49 %) = risque élevé.")  # 1.1.1
+    st.markdown("🟢 Faible ｜ 🔴 Élevé")  # 1.4.1
 
-# --- Application Streamlit ---
-st.set_page_config(
-    page_title="Prédiction de Défaut Client", 
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
 
-st.title("🏦 Application de Prédiction de Défaut Client")
+def show_importances(client_payload):
+    st.subheader("📈 Analyse des Variables")
+    res       = call_api(API_SHAP_VALUES, client_payload, timeout=60)
+    shap_vals = res.get("shap_values", {})
+    base_val  = res.get("expected_value", 0)
+    if not shap_vals:
+        st.warning("Impossible de récupérer les valeurs SHAP.")
+        return
 
-# Chargement modèle (n'est plus nécessaire directement pour SHAP local ici)
-# Le modèle est chargé par l'API Flask maintenant
-model = None # Définir à None ou supprimer si non utilisé ailleurs
+    feats = list(shap_vals.keys())
+    arr   = np.array([shap_vals[f] for f in feats])
 
-# Test de connectivité API
-with st.sidebar:
-    st.header("🔍 Sélection du Client et Analyses")
-    if st.button("🔄 Tester la connexion API de Prédiction"):
-        try:
-            response = requests.get(API_URL.replace('/predict', '/'), timeout=10)
-            if response.status_code == 200:
-                st.success("✅ API de Prédiction accessible")
-            else:
-                st.error(f"❌ API de Prédiction répond avec le code {response.status_code}")
-        except Exception as e:
-            st.error(f"❌ Erreur de connexion à l'API de Prédiction: {e}")
+    # SHAP Waterfall
+    st.subheader(" Waterfall Plot SHAP : liste des variables par ordre d'importance")
+    fig, ax = plt.subplots(figsize=(4,3))
+    ax.tick_params(labelsize=12); ax.set_title("SHAP Waterfall", fontsize=14)
+    shap.plots.waterfall(shap.Explanation(values=arr, base_values=base_val, feature_names=feats),
+                            max_display=8, show=False)
+    st.pyplot(fig); plt.close(fig)
+    st.caption("Diagramme en cascade des valeurs SHAP.")  # 1.1.1
+
+    # DataFrame des importances
+    abs_imp = {f: abs(v) for f,v in shap_vals.items()}
+    total   = sum(abs_imp.values()) or 1
+    norm    = {f: abs_imp[f]/total*100 for f in feats}
+    df = pd.DataFrame([
+        {"Variable":f, "Globale (%)": global_imp.get(f,0), "Locale (%)": norm[f]}
+        for f in feats
+    ]).sort_values("Globale (%)", ascending=False)
+
+    # Bar chart Globale vs Locale
+    st.subheader("📊 Comparaison Importance Globale vs Locale pour chaque variable")
     
-    if st.button("🔄 Tester la connexion API SHAP"):
-        try:
-            # Envoyer un petit jeu de données de test à l'API SHAP
-            # Assurez-vous que les champs correspondent aux attentes de l'API
-            test_data_for_shap = {
-                "NAME_INCOME_TYPE_Working": 0, "EXT_SOURCE_2": 0.5, "NAME_EDUCATION_TYPE_Higher education": 0,
-                "NAME_EDUCATION_TYPE_Secondary / secondary special": 1, "cc_PERIODE_Y_sum_sum": 0,
-                "FLAG_EMP_PHONE": 1, "EXT_SOURCE_1": 0.6, "EXT_SOURCE_3": 0.7, "FLAG_DOCUMENT_3": 1,
-                "CODE_GENDER": 0, "FLAG_OWN_CAR": 0
-            }
-            response = requests.post(SHAP_API_URL, json=test_data_for_shap, timeout=10)
-            if response.status_code == 200:
-                st.success("✅ API SHAP accessible et répond.")
-                # st.json(response.json()) # Pour voir la réponse de test
-            else:
-                st.error(f"❌ API SHAP répond avec le code {response.status_code}")
-                st.json(response.json()) # Afficher la réponse d'erreur de l'API
-        except Exception as e:
-            st.error(f"❌ Erreur de connexion à l'API SHAP: {e}")
+    fig2 = go.Figure()
+    fig2.add_trace(go.Bar(
+        x=df["Variable"], y=df["Globale (%)"], name="Globale (%)",
+        marker_color="#003f5c", marker_pattern={"shape":"/"}, opacity=0.9
+    ))
+    fig2.add_trace(go.Bar(
+        x=df["Variable"], y=df["Locale (%)"], name="Locale (%)",
+        marker_color="#d62728", marker_pattern={"shape":"x"}, opacity=0.9
+    ))
+    fig2.update_layout(barmode="group", xaxis_tickangle=-45, font={"size":16})
+    st.plotly_chart(fig2, use_container_width=True)
+    st.caption("Hachurées = globale, croisées = locale.")  # 1.1.1
+
+    st.subheader("📋 Détail des variables")
+    st.dataframe(df, use_container_width=True)
 
 
-# Charger les données
-all_data = load_data(DATA_FILE)
-global_importance = load_global_feature_importance()
+def show_population(var, client):
+    st.subheader(f"📦 Analyse du client au sein de la population : {var}")
+    col1, _ = st.columns([1,2])
+    with col1:
+        # continue
+        if var in boxplot.get("0", {}) and var in boxplot.get("1", {}):
+            raw0, raw1 = boxplot["0"][var], boxplot["1"][var]
+            stats0 = {"label":"No-def","med":raw0["median"],"q1":raw0["q1"],
+                      "q3":raw0["q3"],"whislo":raw0["min"],"whishi":raw0["max"],"fliers":[]}
+            stats1 = {"label":"Def",   "med":raw1["median"],"q1":raw1["q1"],
+                      "q3":raw1["q3"],"whislo":raw1["min"],"whishi":raw1["max"],"fliers":[]}
 
-if all_data is not None:
-    data_by_id = {item['id']: item for item in all_data}
-    available_ids = sorted(list(data_by_id.keys()))
+            fig, ax = plt.subplots(figsize=(4,3))
+            ax.tick_params(labelsize=12); ax.set_title(var, fontsize=14)
+            ax.bxp([stats0, stats1], showfliers=False)
+            ax.axhline(client[var], color="red", linestyle="--", linewidth=2)
+            st.pyplot(fig); plt.close(fig)
+            st.caption("Boxplot : défaut=0 vs défaut=1 ; ligne rouge = valeur du client.")  #1.1.1
 
-    if not available_ids:
-        st.error("Aucun client avec un ID valide trouvé dans les données.")
-    else:
-        # Sidebar pour la sélection du client
-        client_id = st.sidebar.selectbox(
-            "Sélectionnez l'ID du client",
-            options=available_ids,
-            index=0
-        )
-
-        if client_id in data_by_id:
-            selected_client_data = data_by_id[client_id]
-            features_to_display = {k: v for k, v in selected_client_data.items() if k != 'id'}
-
-            st.header(f"📊 Analyse pour le Client ID: {client_id}")
+        # bool
+        elif var in boolstats.get("0", {}) and var in boolstats.get("1", {}):
+            # Récupère les effectifs ou pourcentages bruts
+            t0, t1 = boolstats["0"][var], boolstats["1"][var]
             
-            # --- Nouvelle section dans le sidebar pour les analyses ---
-            st.sidebar.markdown("---")
-            st.sidebar.subheader("🚀 Options d'Analyse")
-
-            # Checkboxes for analysis options
-            selected_analyses = []
-            if st.sidebar.checkbox("Scorer le client (Jauge)"):
-                selected_analyses.append("score_gauge")
-            if st.sidebar.checkbox("Importance locale et globale des variables"):
-                selected_analyses.append("feature_importance")
-            if st.sidebar.checkbox("Client dans la population (Distributions)"):
-                selected_analyses.append("population_analysis")
+            modalities = [0, 1]
+            no_def_vals = []
+            def_vals    = []
             
-            # Process selected analyses
-            if selected_analyses: # Only call API if at least one analysis is selected
-                prediction_result = get_prediction_from_api(features_to_display)
+            # Calcule, pour chaque modalité, la part No-def vs Def (en %)
+            for m in modalities:
+                cnt_no = t0.get(str(m), 0)
+                cnt_def = t1.get(str(m), 0)
+                total = cnt_no + cnt_def or 1
+                no_def_vals.append(cnt_no  / total * 100)
+                def_vals.append(cnt_def / total * 100)
+            
+            # Prépare le graphique
+            fig, ax = plt.subplots(figsize=(4,3))
+            ax.set_title(var, fontsize=14)
+            ax.set_ylabel("Répartition (%)")
+            ax.tick_params(labelsize=12)
+            
+            x = np.arange(len(modalities))
+            width = 0.6
+            
+            bars_no = ax.bar(x,               no_def_vals, width,
+                            color="#006400", label="No-def")
+            bars_de = ax.bar(x,               def_vals,    width,
+                            bottom=no_def_vals,
+                            color="#8B0000", label="Def")
+            
+            ax.set_xticks(x)
+            ax.set_xticklabels([str(m) for m in modalities])
+            ax.legend(
+                fontsize=12,
+                bbox_to_anchor=(1.02, 1),
+                loc='upper left',
+                borderaxespad=0
+            )
+            
+            # Hachures sur la barre du client
+            client_val = client[var]
+            idx = modalities.index(client_val)
+            for patch in (bars_no[idx], bars_de[idx]):
+                patch.set_hatch("///")
+                patch.set_edgecolor("black")
+            
+            st.pyplot(fig)
+            plt.close(fig)
+            st.caption(
+                "Histogramme empilé 0 vs 1 (chaque barre = 100 %) : vert = pas défaut, rouge = défaut.\n "
+                "Barre hachurée = groupe du client."
+            )
 
-                if prediction_result:
-                    prediction = prediction_result.get('prediction')
-                    probability = prediction_result.get('probability')
-
-                    if prediction is not None and probability is not None:
-                        # 1. Scorer le client (Jauge)
-                        if "score_gauge" in selected_analyses:
-                            st.subheader("🎯 Score de Risque")
-                            create_plotly_gauge(probability)
-                            if prediction == 1:
-                                st.error("⚠️ Ce client est prédit comme étant en défaut.")
-                            else:
-                                st.success("✅ Ce client est prédit comme n'étant pas en défaut.")
-
-                        # 2. Importance locale et globale des variables
-                        if "feature_importance" in selected_analyses:
-                            if global_importance: # Plus besoin de vérifier 'model is not None' ici
-                                st.subheader("📈 Analyse des Variables")
-                                
-                                # Appel à la nouvelle API SHAP pour l'importance locale
-                                local_importance_dict = get_local_feature_importance_from_api(features_to_display)
-                                
-                                if local_importance_dict:
-                                    local_importance_normalized = local_importance_dict['normalized']
-                                    
-                                    # Créer un DataFrame pour l'affichage
-                                    df_analysis = pd.DataFrame([
-                                        {
-                                            'Variable': feature,
-                                            'Valeur Client': value,
-                                            'Importance Globale (%)': global_importance.get(feature, 0),
-                                            'Importance Locale (%)': local_importance_normalized.get(feature, 0)
-                                            
-                                        }
-                                        for feature, value in features_to_display.items()
-                                    ]).sort_values('Importance Globale (%)', ascending=False)
-                                    
-                                    # Graphique avec barres comparatives (Globale vs Locale)
-                                    st.subheader("📊 Comparaison Importance Globale vs Locale")
-                                    
-                                    # Préparer les données pour le graphique
-                                    chart_data = df_analysis.set_index('Variable')[['Importance Globale (%)', 'Importance Locale (%)']]
-                                    
-                                    # Créer le graphique avec Plotly pour plus de contrôle
-                                    fig = go.Figure()
-                                    
-                                    # Ajouter les barres pour l'importance globale
-                                    fig.add_trace(go.Bar(
-                                        name='Importance Globale (%)',
-                                        x=chart_data.index,
-                                        y=chart_data['Importance Globale (%)'],
-                                        marker_color='lightblue',
-                                        opacity=0.8
-                                    ))
-                                    
-                                    # Ajouter les barres pour l'importance locale
-                                    fig.add_trace(go.Bar(
-                                        name='Importance Locale (%)',
-                                        x=chart_data.index,
-                                        y=chart_data['Importance Locale (%)'],
-                                        marker_color='orange',
-                                        opacity=0.8
-                                    ))
-                                    
-                                    # Mise à jour du layout
-                                    fig.update_layout(
-                                        title="Comparaison des Importances des Variables",
-                                        xaxis_title="Variables",
-                                        yaxis_title="Importance (%)",
-                                        barmode='group',
-                                        height=500,
-                                        xaxis_tickangle=-45
-                                    )
-                                    
-                                    st.plotly_chart(fig, use_container_width=True)
-                                    
-                                    # Tableau détaillé
-                                    st.subheader("📋 Tableau Détaillé des Variables")
-                                    st.dataframe(df_analysis, use_container_width=True)
-                                else:
-                                    st.warning("⚠️ Impossible de récupérer l'importance locale des variables depuis l'API SHAP.")
-
-                            else:
-                                st.warning("⚠️ Fichier d'importance globale non disponible")
-                        
-                        # 3. Client dans la population (Distributions)
-                        if "population_analysis" in selected_analyses:
-                            st.subheader("📦 Analyse du Client dans la Population")
-
-                            boxplot_json_path = "boxplot_stats.json"
-                            bool_stats_path = "bool_stats.json"
-
-                            try:
-                                # Charger les statistiques
-                                with open(boxplot_json_path, "r") as f:
-                                    boxplot_stats = json.load(f)
-                                with open(bool_stats_path, "r", encoding="utf-8") as f:
-                                    bool_stats = json.load(f)
-
-                                # Déterminer les variables continues et booléennes disponibles
-                                # On filtre sur les clés présentes dans features_to_display ET dans les fichiers de stats
-                                continuous_vars = [
-                                    var for var in features_to_display.keys() 
-                                    if var in boxplot_stats.get('0', {}) and var in boxplot_stats.get('1', {})
-                                ]
-                                bool_vars = [
-                                    var for var in features_to_display.keys() 
-                                    if features_to_display[var] in [0, 1] and 
-                                    var in bool_stats.get('0', {}) and var in bool_stats.get('1', {})
-                                ]
-                                
-                                all_dist_vars = sorted(list(set(continuous_vars + bool_vars)))
-
-                                if not all_dist_vars:
-                                    st.warning("Aucune variable continue ou booléenne pertinente trouvée pour l'analyse des distributions.")
-                                else:
-                                    selected_dist_var = st.selectbox(
-                                        "Sélectionnez une variable à analyser :",
-                                        options=all_dist_vars
-                                    )
-
-                                    if selected_dist_var in continuous_vars:
-                                        st.subheader(f"Boxplot pour '{selected_dist_var}'")
-                                        # Créer une colonne pour contenir le graphique et réduire sa largeur
-                                        col_graph, _ = st.columns([0.6, 0.4]) # 60% de largeur pour le graph, 40% vide
-                                        with col_graph:
-                                            fig, ax = plt.subplots(figsize=(6, 4)) 
-
-                                            box_data = [
-                                                {
-                                                    'med': boxplot_stats['0'][selected_dist_var]['median'],
-                                                    'q1': boxplot_stats['0'][selected_dist_var]['q1'],
-                                                    'q3': boxplot_stats['0'][selected_dist_var]['q3'],
-                                                    'whislo': boxplot_stats['0'][selected_dist_var]['min'],
-                                                    'whishi': boxplot_stats['0'][selected_dist_var]['max'],
-                                                    'fliers': [],
-                                                    'label': 'Target 0'
-                                                },
-                                                {
-                                                    'med': boxplot_stats['1'][selected_dist_var]['median'],
-                                                    'q1': boxplot_stats['1'][selected_dist_var]['q1'],
-                                                    'q3': boxplot_stats['1'][selected_dist_var]['q3'],
-                                                    'whislo': boxplot_stats['1'][selected_dist_var]['min'],
-                                                    'whishi': boxplot_stats['1'][selected_dist_var]['max'],
-                                                    'fliers': [],
-                                                    'label': 'Target 1'
-                                                }
-                                            ]
-
-                                            ax.bxp(box_data, showfliers=False)
-                                            ax.set_title(selected_dist_var, fontsize=12)
-                                            ax.tick_params(axis='both', labelsize=10)
-                                            client_val = features_to_display.get(selected_dist_var)
-                                            if client_val is not None:
-                                                ax.axhline(client_val, color='red', linestyle='--', label=f'Client: {client_val:.2f}')
-                                                ax.legend(fontsize=10)
-
-                                            st.pyplot(fig, use_container_width=True) # Garder use_container_width=True pour qu'il remplisse la petite colonne
-                                            plt.close(fig) # Important pour éviter les avertissements Streamlit
-
-                                    elif selected_dist_var in bool_vars:
-                                        st.subheader(f"Distribution pour '{selected_dist_var}'")
-                                        target0 = bool_stats['0'][selected_dist_var]
-                                        target1 = bool_stats['1'][selected_dist_var]
-
-                                        df_plot = pd.DataFrame({
-                                            "Valeur": [0, 1],
-                                            "Target 0 (%)": [target0["0"], target0["1"]],
-                                            "Target 1 (%)": [target1["0"], target1["1"]]
-                                        })
-
-                                        # Créer une colonne pour contenir le graphique et réduire sa largeur
-                                        col_graph, _ = st.columns([0.6, 0.4]) # 60% de largeur pour le graph, 40% vide
-                                        with col_graph:
-                                            fig, ax = plt.subplots(figsize=(6, 4))
-                                            width = 0.35
-                                            x = np.arange(len(df_plot["Valeur"]))
-
-                                            bars1 = ax.bar(x - width/2, df_plot["Target 0 (%)"], width=width, color="green", label="Target 0")
-                                            bars2 = ax.bar(x + width/2, df_plot["Target 1 (%)"], width=width, color="red", label="Target 1")
-
-                                            ax.set_xticks(x)
-                                            ax.set_xticklabels(["0", "1"])
-                                            ax.set_ylim(0, 100)
-                                            ax.set_ylabel("Pourcentage")
-                                            ax.set_title(selected_dist_var, fontsize=12)
-                                            
-                                            client_val = features_to_display.get(selected_dist_var)
-                                            if isinstance(client_val, (int, float)) and int(client_val) in [0, 1]:
-                                                client_val_int = int(client_val)
-                                                if client_val_int == 0:
-                                                    bars1[0].set_edgecolor('black')
-                                                    bars1[0].set_linewidth(3)
-                                                    bars2[0].set_edgecolor('black') 
-                                                    bars2[0].set_linewidth(3)
-                                                else:
-                                                    bars1[1].set_edgecolor('black')
-                                                    bars1[1].set_linewidth(3)
-                                                    bars2[1].set_edgecolor('black')
-                                                    bars2[1].set_linewidth(3)
-                                                
-                                                from matplotlib.patches import Rectangle
-                                                legend_elements = [
-                                                    Rectangle((0, 0), 1, 1, facecolor='green', label='Target 0'),
-                                                    Rectangle((0, 0), 1, 1, facecolor='red', label='Target 1'),
-                                                    Rectangle((0, 0), 1, 1, facecolor='none', edgecolor='black', linewidth=3, label=f'Client: {client_val_int}')
-                                                ]
-                                                ax.legend(handles=legend_elements, fontsize=10)
-                                            else:
-                                                ax.legend(fontsize=10)
-
-                                            st.pyplot(fig, use_container_width=True) # Garder use_container_width=True
-                                            plt.close(fig) # Important
-                                        
-                            except FileNotFoundError:
-                                st.warning("📁 Fichier 'boxplot_stats.json' ou 'bool_stats.json' introuvable. Merci de les générer avec les stats.")
-                            except Exception as e:
-                                st.error(f"Erreur lors de l'affichage des distributions : {e}")
-
-                    else:
-                        st.warning("La réponse de l'API ne contient pas les clés 'prediction' ou 'probability'.")
-                        st.json(prediction_result)
-                else:
-                    st.warning("Impossible d'obtenir la prédiction de l'API. Veuillez vérifier la connexion.")
-            else: # Si aucune analyse n'est sélectionnée
-                st.info("Veuillez sélectionner une ou plusieurs options d'analyse dans la barre latérale pour voir les résultats.")
-
-            # Affichage des données brutes
-            with st.expander("📄 Voir les données brutes du client"):
-                st.json(features_to_display)
 
         else:
-            st.warning(f"ID client {client_id} non trouvé dans les données disponibles.")
+            st.warning("Variable non disponible pour l’analyse population.")
 
-# Footer
-st.markdown("---")
-st.markdown("💡 **Astuce**: Si vous rencontrez des problèmes, vérifiez que l'API est bien déployée et accessible.")
+def show_bivariate(var1, var2, client):
+    # Récupère les données du JSON (ordre indifférent)
+    st.subheader(f"📦 Analyse bivariée entre {var1} et {var2}")
+    col1, _ = st.columns([1,2])
+    with col1:
+        key = f"{var1}__{var2}"
+        data = bivar_data.get(key) or bivar_data.get(f"{var2}__{var1}", [])
+        if not data:
+            st.warning("Pas de données pour ce couple de variables.")
+            return
+
+        # Extrait x, y et statut def
+        xs = np.array([d[var1] for d in data])
+        ys = np.array([d[var2] for d in data])
+        defs = np.array([d["def"] for d in data])
+
+        # Ajout d'un léger jitter pour séparer les points superposés
+        jitter = 0.05
+        xs = xs + np.random.uniform(-jitter, jitter, len(xs))
+        ys = ys + np.random.uniform(-jitter, jitter, len(ys))
+
+        # Sépare indices no-def vs def
+        idx0 = np.where(defs == 0)[0]
+        idx1 = np.where(defs == 1)[0]
+
+        # Tracé
+        fig, ax = plt.subplots(figsize=(5,4))
+        ax.set_title(f"{var1} vs {var2}", fontsize=14)
+        ax.set_xlabel(var1)
+        ax.set_ylabel(var2)
+
+        ax.scatter(xs[idx0], ys[idx0], c="#000000", alpha=0.6, label="No-def")
+        ax.scatter(xs[idx1], ys[idx1], c="#ff0000", alpha=0.6, label="Def")
+
+        # Point client en évidence
+        cx, cy = client[var1], client[var2]
+        ax.scatter(
+            cx, cy,
+            s=150,
+            edgecolors="yellow",
+            facecolors="none",
+            linewidth=2,
+            label="Client"
+        )
+
+        # Légende en dehors
+        ax.legend(
+            bbox_to_anchor=(1.02, 1),
+            loc="upper left",
+            borderaxespad=0,
+            fontsize=12
+        )
+        fig.subplots_adjust(right=0.75)
+
+        st.pyplot(fig)
+        plt.close(fig)
+
+
+# ── Sidebar : tests API, sélection client et analyses ─────────────────────────
+with st.sidebar:
+    st.header("🔍 Connexions & Sélection")
+    if st.button("Tester API Prédiction"):
+        try:
+            r = requests.get(API_PREDICT.replace("/predict","/"), timeout=5)
+            st.success("✅ Prédiction OK") if r.status_code==200 else st.error(f"❌ {r.status_code}")
+        except Exception as e:
+            st.error(f"❌ {e}")
+
+    if st.button("Tester API SHAP"):
+        try:
+            test = {k:0 for k in list(global_imp)[:5]}
+            r = requests.post(API_SHAP_VALUES, json=test, timeout=5)
+            st.success("✅ SHAP OK") if r.status_code==200 else st.error(f"❌ {r.status_code}")
+        except Exception as e:
+            st.error(f"❌ {e}")
+
+    # Sélection client (repris de votre code d'origine)
+    if not clients:
+        st.error("Aucun client disponible."); st.stop()
+    data_by_id   = {c["id"]:c for c in clients}
+    available_ids = sorted(data_by_id.keys())
+    client_id    = st.selectbox("Sélection ID client", available_ids)
+
+    st.markdown("---")
+    sel_opts = st.multiselect(
+        "Analyses disponibles",
+        ["Score", "Features Importance", "Population", "Bi-variée"]
+    )
+
+# ── Récupération du client hors sidebar ───────────────────────────────────────
+client  = data_by_id[client_id]
+payload = {k:v for k,v in client.items() if k != "id"}
+
+# ── Exécution des analyses ────────────────────────────────────────────────────
+if sel_opts:
+    pr   = call_api(API_PREDICT, payload)
+    prob = pr.get("probability", 0)
+    pred = pr.get("prediction",   0)
+
+    if "Score" in sel_opts:
+        show_gauge(prob)
+        st.write("✅ Aucun défaut prévu" if pred==0 else "⚠️ Défaut prévu")
+
+    if "Features Importance" in sel_opts:
+        show_importances(payload)
+
+    if "Population" in sel_opts:
+        # liste des variables continues et booléennes
+        cont_vars = [v for v in payload if v in boxplot.get("0", {})]
+        bool_vars = [v for v in payload if v in boolstats.get("0", {})]
+        pop_vars  = sorted(set(cont_vars + bool_vars))
+        var = st.selectbox("Variable population", pop_vars)
+        show_population(var, client)
+    
+    if "Bi-variée" in sel_opts:
+        # Liste des features uniques disponibles
+        pairs = list(bivar_data.keys())
+        features = sorted({v for key in pairs for v in key.split("__")})
+        
+        var1 = st.selectbox("Variable 1", features, key="biv1")
+        var2 = st.selectbox("Variable 2", features, key="biv2")
+        
+        if var1 and var2 and var1 != var2:
+            show_bivariate(var1, var2, client)
+    
+else:
+    st.info("Sélectionnez au moins une analyse dans la sidebar.")
+
+# ── Données brutes ───────────────────────────────────────────────────────────
+with st.expander("📄 Données brutes du client"):
+    st.json(client)
