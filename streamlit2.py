@@ -62,7 +62,7 @@ def call_api(url, payload, timeout=30):
 def show_gauge(prob):
     st.subheader("🎯 Score de Risque")
     score, thresh = prob * 100, 49
-    low_c, high_c = "#00429d", "#b30000"   # 1.4.3
+    low_c, high_c = "#00429d", "#410202"   # 1.4.3
     bar_c = low_c if score < thresh else high_c
     emoji = "🟢" if score < thresh else "🔴"
     risk_level = "Faible" if score < thresh else "Élevé"
@@ -78,8 +78,8 @@ def show_gauge(prob):
             "axis": {"range": [0,100], "tickfont": {"size": 14}},
             "bar": {"color": bar_c},
             "steps": [
-                {"range": [0, thresh],   "color": "#006400"},
-                {"range": [thresh,100],  "color": "#8B0000"}
+                {"range": [0, thresh],   "color": "#0EBB0E"},
+                {"range": [thresh,100],  "color": "#EE4040"}
             ],
             "threshold": {"line": {"color":"#000","width":4}, "value": thresh}
         }
@@ -99,7 +99,8 @@ def show_gauge(prob):
     
     
     
-    st.caption("Jauge : vert (<49 %) = faible risqué, rouge (≥49 %) = risque élevé.")  # 1.1.1
+    st.markdown('<p style="color:black;">Jauge : vert (<49%) = faible risque, rouge (≥49%) = risque élevé.</p>', unsafe_allow_html=True)
+    # 1.1.1
     st.markdown("🟢 Faible ｜ 🔴 Élevé")  # 1.4.1
 
 
@@ -122,7 +123,8 @@ def show_importances(client_payload):
     shap.plots.waterfall(shap.Explanation(values=arr, base_values=base_val, feature_names=feats),
                             max_display=8, show=False)
     st.pyplot(fig); plt.close(fig)
-    st.caption("Diagramme en cascade des valeurs SHAP.")  # 1.1.1
+    st.markdown('<p style="color:black;">Diagramme en cascade des valeurs SHAP.</p>', unsafe_allow_html=True)
+    # 1.1.1
 
     # DataFrame des importances
     abs_imp = {f: abs(v) for f,v in shap_vals.items()}
@@ -145,9 +147,18 @@ def show_importances(client_payload):
         x=df["Variable"], y=df["Locale (%)"], name="Locale (%)",
         marker_color="#d62728", marker_pattern={"shape":"x"}, opacity=0.9
     ))
-    fig2.update_layout(barmode="group", xaxis_tickangle=-45, font={"size":16})
+    fig2.update_layout(
+        barmode="group",
+        xaxis_tickangle=-45,
+        font={"size": 16, "color": "black"},  # couleur du texte général
+        xaxis={
+            "tickfont": {"color": "black", "size": 14},  # ✅ couleur des noms sur l’axe X
+        }
+    )
+
     st.plotly_chart(fig2, use_container_width=True)
-    st.caption("Hachurées = globale, croisées = locale.")  # 1.1.1
+    st.markdown('<p style="color:black;"Hachurées = globale, croisées = locale.</p>', unsafe_allow_html=True)
+    # 1.1.1
 
     st.subheader("📋 Détail des variables")
     st.dataframe(df, use_container_width=True)
@@ -170,7 +181,8 @@ def show_population(var, client):
             ax.bxp([stats0, stats1], showfliers=False)
             ax.axhline(client[var], color="red", linestyle="--", linewidth=2)
             st.pyplot(fig); plt.close(fig)
-            st.caption("Boxplot : défaut=0 vs défaut=1 ; ligne rouge = valeur du client.")  #1.1.1
+            st.markdown('<p style="color:black;">Boxplot : Distribution de la population en défaut Vs no-défaut ; ligne rouge = valeur du client.</p>', unsafe_allow_html=True)
+            #1.1.1
 
         # bool
         elif var in boolstats.get("0", {}) and var in boolstats.get("1", {}):
@@ -199,10 +211,10 @@ def show_population(var, client):
             width = 0.6
             
             bars_no = ax.bar(x,               no_def_vals, width,
-                            color="#006400", label="No-def")
+                            color="#1CF01C", label="No-def")
             bars_de = ax.bar(x,               def_vals,    width,
                             bottom=no_def_vals,
-                            color="#8B0000", label="Def")
+                            color="#EB2020", label="Def")
             
             ax.set_xticks(x)
             ax.set_xticklabels([str(m) for m in modalities])
@@ -222,9 +234,15 @@ def show_population(var, client):
             
             st.pyplot(fig)
             plt.close(fig)
-            st.caption(
-                "Histogramme empilé 0 vs 1 (chaque barre = 100 %) : vert = pas défaut, rouge = défaut.\n "
-                "Barre hachurée = groupe du client."
+            st.markdown(
+                """
+                <p style="color:black;">
+                Histogramme empilé 0 vs 1 (chaque barre = 100 %) : <strong style="color:#009900;">vert</strong> = pas défaut,
+                <strong style="color:#cc0000;">rouge</strong> = défaut. <br>
+                <em>Barre hachurée = groupe du client.</em>
+                </p>
+                """,
+                unsafe_allow_html=True
             )
 
 
@@ -262,7 +280,7 @@ def show_bivariate(var1, var2, client):
         ax.set_xlabel(var1)
         ax.set_ylabel(var2)
 
-        ax.scatter(xs[idx0], ys[idx0], c="#000000", alpha=0.6, label="No-def")
+        ax.scatter(xs[idx0], ys[idx0], c="#4FF10F", alpha=0.6, label="No-def")
         ax.scatter(xs[idx1], ys[idx1], c="#ff0000", alpha=0.6, label="Def")
 
         # Point client en évidence
@@ -270,7 +288,7 @@ def show_bivariate(var1, var2, client):
         ax.scatter(
             cx, cy,
             s=150,
-            edgecolors="yellow",
+            edgecolors="black",
             facecolors="none",
             linewidth=2,
             label="Client"
@@ -287,7 +305,7 @@ def show_bivariate(var1, var2, client):
 
         st.pyplot(fig)
         plt.close(fig)
-
+        st.markdown('<p style="color:black;">Distribution de la population. Vert=OK, rouge=défaut, client=cercle noir. </p>', unsafe_allow_html=True)
 
 # ── Sidebar : tests API, sélection client et analyses ─────────────────────────
 with st.sidebar:
